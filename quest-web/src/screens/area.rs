@@ -128,7 +128,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                 } else {
                     *progress_ref.borrow_mut() = 0.0;
                     progress_state.set(0.0);
-                    flash.set(false);
                 }
 
                 move || drop(interval_handle)
@@ -190,7 +189,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                 } else {
                     *mob_progress_ref.borrow_mut() = 0.0;
                     mob_progress_state.set(0.0);
-                    mob_flash.set(false);
                 }
 
                 move || drop(interval_handle)
