@@ -12,6 +12,7 @@ pub struct AreaScreenProps {
     pub current_mob: Option<Mob>,
     pub encounters_cleared: u32,
     pub is_boss: bool,
+    pub has_auto_combat: bool,
     pub on_exit: Callback<()>,
     pub on_attack: Callback<()>,
     pub on_enter_portal: Callback<()>,
@@ -22,8 +23,10 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     let is_attacking = use_state(|| false);
     let is_spawning = use_state(|| false);
     let is_portal_spawning = use_state(|| false);
+    let action_progress = use_state(|| 0.0f64);
+    let action_flash = use_state(|| false);
 
-    // Trigger spawn animation when a boss appears
+    // Boss spawn animation
     {
         let is_spawning_setter = is_spawning.clone();
         let is_boss = props.is_boss;
@@ -44,7 +47,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         );
     }
 
-    // Trigger portal spawn animation
+    // Portal spawn animation
     {
         let is_portal_spawning_setter = is_portal_spawning.clone();
         let can_show_portal = props.current_mob.is_none() && props.encounters_cleared >= props.area.base_encounter_amount;
@@ -61,6 +64,51 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                 }
                 || ()
             }
+        );
+    }
+
+    // Auto-combat action bar timer
+    {
+        let progress = action_progress.clone();
+        let flash = action_flash.clone();
+        let has_auto = props.has_auto_combat;
+        let has_mob = props.current_mob.as_ref().map_or(false, |m| !m.is_dead());
+        let action_speed = props.player.action_speed_ms;
+        let on_attack_cb = props.on_attack.clone();
+
+        use_effect_with(
+            (has_auto, has_mob, action_speed),
+            move |(auto, mob_alive, speed)| {
+                let mut interval_handle: Option<gloo_timers::callback::Interval> = None;
+
+                if *auto && *mob_alive {
+                    let tick_ms = 50u32;
+                    let increment = (tick_ms as f64 / *speed as f64) * 100.0;
+                    let progress_handle = progress.clone();
+                    let flash_handle = flash.clone();
+                    let attack_cb = on_attack_cb.clone();
+
+                    interval_handle = Some(gloo_timers::callback::Interval::new(tick_ms, move || {
+                        let current = *progress_handle + increment;
+                        if current >= 100.0 {
+                            flash_handle.set(true);
+                            attack_cb.emit(());
+                            progress_handle.set(0.0);
+                            let flash_reset = flash_handle.clone();
+                            gloo_timers::callback::Timeout::new(300, move || {
+                                flash_reset.set(false);
+                            })
+                            .forget();
+                        } else {
+                            progress_handle.set(current);
+                        }
+                    }));
+                } else {
+                    progress.set(0.0);
+                }
+
+                move || drop(interval_handle)
+            },
         );
     }
 
@@ -101,7 +149,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                         { format!("Encounters Cleared: {}/{}", props.encounters_cleared, props.area.base_encounter_amount) }
                     </p>
                 </div>
-                
+
                 {
                     if let Some(mob) = &props.current_mob {
                         let anim_class = if *is_attacking {
@@ -118,10 +166,10 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                         html! {
                             <div class={classes!("mob-hud", anim_class, boss_class, spawn_class)}>
                                 <h3>{ &mob.name }</h3>
-                                <HealthBar 
-                                    current={mob.health} 
-                                    max={mob.max_health} 
-                                    label={Some("HP".to_string())} 
+                                <HealthBar
+                                    current={mob.health}
+                                    max={mob.max_health}
+                                    label={Some("HP".to_string())}
                                 />
                             </div>
                         }
@@ -149,26 +197,43 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
             <div class="action-bar">
                 <div class="player-hud">
                     <div class="player-name">{ &props.player.name }</div>
-                    <HealthBar 
-                        current={props.player.health} 
-                        max={props.player.max_health} 
-                        label={Some("HP".to_string())} 
+                    <HealthBar
+                        current={props.player.health}
+                        max={props.player.max_health}
+                        label={Some("HP".to_string())}
                     />
+                    {
+                        if props.has_auto_combat {
+                            let flash_class = if *action_flash { "action-speed-bar-flash" } else { "" };
+                            html! {
+                                <div class={classes!("action-speed-bar-container", flash_class)}>
+                                    <div class="action-speed-bar-fill" style={format!("width: {}%;", *action_progress)}></div>
+                                    <div class="action-speed-bar-text">{"Action"}</div>
+                                </div>
+                            }
+                        } else {
+                            html! {}
+                        }
+                    }
                 </div>
                 <div class="action-buttons">
                     {
-                        if let Some(mob) = &props.current_mob {
-                            html! {
-                                <button class="btn btn-primary" onclick={on_attack.clone()} disabled={mob.is_dead() || *is_attacking}>
-                                    { "Attack" }
-                                </button>
+                        if !props.has_auto_combat {
+                            if let Some(mob) = &props.current_mob {
+                                html! {
+                                    <button class="btn btn-primary" onclick={on_attack.clone()} disabled={mob.is_dead() || *is_attacking}>
+                                        { "Attack" }
+                                    </button>
+                                }
+                            } else {
+                                html! {
+                                    <button class="btn btn-primary" disabled=true>
+                                        { "Attack" }
+                                    </button>
+                                }
                             }
                         } else {
-                            html! {
-                                <button class="btn btn-primary" disabled=true>
-                                    { "Attack" }
-                                </button>
-                            }
+                            html! {}
                         }
                     }
                     <button class="btn btn-danger" onclick={on_exit}>

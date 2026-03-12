@@ -8,5 +8,15 @@
         "bosses": [
             "rat_lord"
         ]
+    },
+    {
+        "id": "the_fringe",
+        "name": "The Fringe",
+        "description": "The edge of the known world. Familiar creatures lurk here, but the air feels different — charged with possibility.",
+        "connected_areas": [],
+        "base_encounter_amount": 10,
+        "bosses": [
+            "rat_lord"
+        ]
     }
 ]

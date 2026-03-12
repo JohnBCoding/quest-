@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// Represents a player character in the game.
+use crate::action::Action;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Player {
     pub name: String,
@@ -8,10 +9,19 @@ pub struct Player {
     pub health: u32,
     pub max_health: u32,
     pub experience: u64,
+    #[serde(default)]
+    pub eaten_fruits: Vec<String>,
+    #[serde(default)]
+    pub actions: Vec<Action>,
+    #[serde(default = "default_action_speed")]
+    pub action_speed_ms: u32,
+}
+
+fn default_action_speed() -> u32 {
+    1000
 }
 
 impl Player {
-    /// Creates a new player with custom name and default starter stats.
     pub fn new(name: &str) -> Self {
         Self {
             name: name.to_string(),
@@ -19,17 +29,45 @@ impl Player {
             health: 50,
             max_health: 50,
             experience: 0,
+            eaten_fruits: Vec::new(),
+            actions: Vec::new(),
+            action_speed_ms: 1000,
         }
     }
 
-    /// Returns true if the player is alive.
     pub fn is_alive(&self) -> bool {
         self.health > 0
+    }
+
+    pub fn has_eaten_fruit(&self, id: &str) -> bool {
+        self.eaten_fruits.iter().any(|f| f == id)
+    }
+
+    pub fn has_auto_combat(&self) -> bool {
+        self.has_eaten_fruit("fruit_of_instinct")
+    }
+
+    pub fn eat_fruit(&mut self, fruit_id: &str) {
+        if self.has_eaten_fruit(fruit_id) {
+            return;
+        }
+        self.eaten_fruits.push(fruit_id.to_string());
+        self.apply_fruit_effect(fruit_id);
+    }
+
+    fn apply_fruit_effect(&mut self, fruit_id: &str) {
+        match fruit_id {
+            "fruit_of_instinct" => {
+                if !self.actions.iter().any(|a| a.id == "attack") {
+                    self.actions.push(Action::default_attack());
+                }
+            }
+            _ => {}
+        }
     }
 }
 
 impl Default for Player {
-    /// Creates the default "Hero" character.
     fn default() -> Self {
         Self::new("Hero")
     }
@@ -38,6 +76,7 @@ impl Default for Player {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::action::ActionTrigger;
 
     #[test]
     fn default_player_has_correct_name() {
@@ -52,6 +91,9 @@ mod tests {
         assert_eq!(player.health, 50);
         assert_eq!(player.max_health, 50);
         assert_eq!(player.experience, 0);
+        assert!(player.eaten_fruits.is_empty());
+        assert!(player.actions.is_empty());
+        assert_eq!(player.action_speed_ms, 1000);
     }
 
     #[test]
@@ -92,5 +134,52 @@ mod tests {
     fn player_deserialization_rejects_missing_fields() {
         let result = serde_json::from_str::<Player>(r#"{"name": "Hero"}"#);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn eat_fruit_adds_to_list_and_sets_up_action() {
+        let mut player = Player::default();
+        player.eat_fruit("fruit_of_instinct");
+        assert!(player.has_eaten_fruit("fruit_of_instinct"));
+        assert_eq!(player.actions.len(), 1);
+        assert_eq!(player.actions[0].id, "attack");
+        assert_eq!(player.actions[0].trigger, ActionTrigger::EveryAction);
+    }
+
+    #[test]
+    fn has_auto_combat_true_after_eating_instinct() {
+        let mut player = Player::default();
+        player.eat_fruit("fruit_of_instinct");
+        assert!(player.has_auto_combat());
+    }
+
+    #[test]
+    fn has_auto_combat_false_on_fresh_player() {
+        let player = Player::default();
+        assert!(!player.has_auto_combat());
+    }
+
+    #[test]
+    fn has_eaten_fruit_false_for_uneaten() {
+        let player = Player::default();
+        assert!(!player.has_eaten_fruit("fruit_of_instinct"));
+    }
+
+    #[test]
+    fn eating_same_fruit_twice_does_not_duplicate() {
+        let mut player = Player::default();
+        player.eat_fruit("fruit_of_instinct");
+        player.eat_fruit("fruit_of_instinct");
+        assert_eq!(player.eaten_fruits.len(), 1);
+        assert_eq!(player.actions.len(), 1);
+    }
+
+    #[test]
+    fn player_with_fruits_serialization_roundtrip() {
+        let mut player = Player::default();
+        player.eat_fruit("fruit_of_instinct");
+        let json = serde_json::to_string(&player).unwrap();
+        let deserialized: Player = serde_json::from_str(&json).unwrap();
+        assert_eq!(player, deserialized);
     }
 }

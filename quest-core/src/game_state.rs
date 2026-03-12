@@ -5,7 +5,6 @@ use crate::mob::Mob;
 use crate::player::Player;
 use crate::rng::{RngManager, RngSnapshot};
 
-/// The complete game state — everything needed to save/load a game.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameState {
     pub player: Player,
@@ -15,36 +14,37 @@ pub struct GameState {
     pub rng_snapshot: RngSnapshot,
     pub is_boss_encounter: bool,
     pub in_town: bool,
-    /// Schema version for future save compatibility.
+    #[serde(default)]
+    pub fruit_scene_active: bool,
+    #[serde(default)]
+    pub pending_fruit_id: Option<String>,
     pub version: u32,
 }
 
-/// Current schema version. Bump this when the save format changes.
-pub const SAVE_VERSION: u32 = 2;
+pub const SAVE_VERSION: u32 = 3;
 
 impl GameState {
-    /// Creates a brand new game with default player and starting area.
     pub fn new_game() -> (Self, RngManager) {
         let rng_manager = RngManager::new();
         let state = Self {
             player: Player::default(),
             current_area: Area::starting_area(),
-            current_mob: Mob::get_by_id("rat"), 
+            current_mob: Mob::get_by_id("rat"),
             encounters_cleared: 0,
             rng_snapshot: rng_manager.snapshot(),
             is_boss_encounter: false,
             in_town: false,
+            fruit_scene_active: false,
+            pending_fruit_id: None,
             version: SAVE_VERSION,
         };
         (state, rng_manager)
     }
 
-    /// Serializes the game state to JSON.
     pub fn serialize(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
 
-    /// Deserializes a game state from JSON.
     pub fn deserialize(data: &str) -> Result<Self, String> {
         let state: GameState =
             serde_json::from_str(data).map_err(|e| format!("Invalid save data: {}", e))?;
@@ -59,25 +59,18 @@ impl GameState {
         Ok(state)
     }
 
-    /// Validates whether a JSON string contains valid save data.
-    /// Returns true only if the data can be fully deserialized and
-    /// the version matches.
     pub fn validate(data: &str) -> bool {
         Self::deserialize(data).is_ok()
     }
 
-    /// Restores the RngManager from the state's snapshot.
     pub fn restore_rng(&self) -> RngManager {
         RngManager::from_snapshot(&self.rng_snapshot)
     }
 
-    /// Updates the RNG snapshot in the state (call before saving).
     pub fn sync_rng(&mut self, rng: &RngManager) {
         self.rng_snapshot = rng.snapshot();
     }
 
-    /// Executes an attack against the current mob, reducing its health by 2.
-    /// Returns `true` if a mob was attacked, `false` if there was no mob.
     pub fn execute_attack(&mut self) -> bool {
         if let Some(mob) = self.current_mob.as_mut() {
             mob.take_damage(2);
@@ -87,20 +80,15 @@ impl GameState {
         }
     }
 
-    /// Advances the encounter if the current mob is dead.
     pub fn advance_encounter(&mut self) -> bool {
         if let Some(mob) = &self.current_mob {
             if mob.is_dead() {
                 if self.is_boss_encounter {
-                    if self.current_area.id == "the_beach" {
-                        self.in_town = true;
-                    }
+                    self.handle_boss_defeat();
                     self.current_mob = None;
                     self.is_boss_encounter = false;
                 } else {
                     self.encounters_cleared += 1;
-                    
-                    // Spawn next encounter if we haven't hit the area max limit yet.
                     if self.encounters_cleared < self.current_area.base_encounter_amount {
                         self.current_mob = Mob::get_by_id("rat");
                     } else {
@@ -113,8 +101,38 @@ impl GameState {
         false
     }
 
-    /// Enters the boss portal for the current area. 
-    /// Returns true if a boss was successfully spawned.
+    fn handle_boss_defeat(&mut self) {
+        if self.current_area.id == "the_beach" && !self.player.has_auto_combat() {
+            self.fruit_scene_active = true;
+            self.pending_fruit_id = Some("fruit_of_instinct".to_string());
+        } else {
+            self.in_town = true;
+        }
+    }
+
+    pub fn complete_fruit_scene(&mut self) {
+        if !self.fruit_scene_active {
+            return;
+        }
+        if let Some(fruit_id) = self.pending_fruit_id.take() {
+            self.player.eat_fruit(&fruit_id);
+        }
+        self.fruit_scene_active = false;
+    }
+
+    pub fn enter_area(&mut self, area_id: &str) -> bool {
+        if let Some(area) = Area::get_by_id(area_id) {
+            self.current_area = area;
+            self.encounters_cleared = 0;
+            self.current_mob = Mob::get_by_id("rat");
+            self.is_boss_encounter = false;
+            self.in_town = false;
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn enter_boss_portal(&mut self, rng: &mut RngManager) -> bool {
         if self.encounters_cleared < self.current_area.base_encounter_amount {
             return false;
@@ -127,7 +145,7 @@ impl GameState {
         let max_idx = self.current_area.bosses.len() as u32 - 1;
         let boss_idx = rng.gen_range("mob_spawns", 0, max_idx) as usize;
         let boss_id = &self.current_area.bosses[boss_idx];
-        
+
         if let Some(boss_mob) = Mob::get_by_id(boss_id) {
             self.current_mob = Some(boss_mob);
             self.is_boss_encounter = true;
@@ -149,6 +167,8 @@ mod tests {
         assert_eq!(state.player.name, "Hero");
         assert_eq!(state.current_area.name, "The Beach");
         assert_eq!(state.version, SAVE_VERSION);
+        assert!(!state.fruit_scene_active);
+        assert!(state.pending_fruit_id.is_none());
     }
 
     #[test]
@@ -212,7 +232,6 @@ mod tests {
     fn rng_restore_produces_working_manager() {
         let (state, _rng) = GameState::new_game();
         let mut restored = state.restore_rng();
-        // Should not panic
         let val = restored.gen_range("loot", 1, 100);
         assert!((1..=100).contains(&val));
     }
@@ -221,28 +240,19 @@ mod tests {
     fn sync_rng_updates_snapshot() {
         let (mut state, mut rng) = GameState::new_game();
         let original_snapshot = state.rng_snapshot.clone();
-
-        // Generate some values to advance the RNG state
         for _ in 0..10 {
             rng.gen_range("loot", 0, 100);
         }
-
-        // The snapshot in state should still be the original
         assert_eq!(state.rng_snapshot, original_snapshot);
-
-        // After sync, snapshot should reflect current RNG seeds
-        // (Note: seeds don't change, only the internal state advances.
-        //  But the snapshot captures seeds, which stay the same.)
         state.sync_rng(&rng);
-        // Seeds themselves don't change, just verifying the method works
         assert_eq!(state.rng_snapshot.seeds, rng.snapshot().seeds);
     }
-    
+
     #[test]
     fn execute_attack_reduces_hp_and_returns_true() {
         let (mut state, _) = GameState::new_game();
         if let Some(mob) = &mut state.current_mob {
-            mob.health = 5; // make it survive 2 damage
+            mob.health = 5;
         }
         let result = state.execute_attack();
         assert!(result);
@@ -253,86 +263,170 @@ mod tests {
     #[test]
     fn execute_attack_kills_mob_and_increments_encounters() {
         let (mut state, _) = GameState::new_game();
-        // default mob (rat) has 2 health
         let result = state.execute_attack();
         assert!(result);
         assert!(state.current_mob.as_ref().unwrap().is_dead());
-        assert_eq!(state.encounters_cleared, 0); // Not advanced yet
-        
+        assert_eq!(state.encounters_cleared, 0);
+
         let advanced = state.advance_encounter();
         assert!(advanced);
         assert_eq!(state.encounters_cleared, 1);
-        // checking the respawn mechanics
-        assert!(state.current_mob.is_some()); 
+        assert!(state.current_mob.is_some());
         assert!(!state.current_mob.as_ref().unwrap().is_dead());
     }
 
     #[test]
     fn execute_attack_stops_spawning_when_cap_reached() {
         let (mut state, _) = GameState::new_game();
-        state.current_area.base_encounter_amount = 2; // only 2 encounters total
-        
-        // kill 1st
+        state.current_area.base_encounter_amount = 2;
+
         state.execute_attack();
         state.advance_encounter();
         assert_eq!(state.encounters_cleared, 1);
         assert!(state.current_mob.is_some());
-        
-        // kill 2nd
+
         state.execute_attack();
         state.advance_encounter();
         assert_eq!(state.encounters_cleared, 2);
-        assert!(state.current_mob.is_none()); // cap reached
+        assert!(state.current_mob.is_none());
     }
 
     #[test]
     fn execute_attack_ignored_when_no_mob() {
-         let (mut state, _) = GameState::new_game();
-         state.current_mob = None;
-         let result = state.execute_attack();
-         assert!(!result);
-         assert_eq!(state.encounters_cleared, 0); // No state change recorded
+        let (mut state, _) = GameState::new_game();
+        state.current_mob = None;
+        let result = state.execute_attack();
+        assert!(!result);
+        assert_eq!(state.encounters_cleared, 0);
     }
 
     #[test]
     fn overkill_damage_clamps_at_zero() {
         let (mut state, _) = GameState::new_game();
-        // simulate standard rat with 2 hp taking 2 damage = 0 health, it's alive during the check just for test isolation
         if let Some(mob) = &mut state.current_mob {
-            mob.health = 1; 
+            mob.health = 1;
         }
-        state.execute_attack(); // Should deal 2 damage, dropping health from 1 to 0 without underflow
+        state.execute_attack();
         assert_eq!(state.current_mob.as_ref().unwrap().health, 0);
-        
+
         state.advance_encounter();
         assert_eq!(state.encounters_cleared, 1);
-        // verify spawned next
         assert!(state.current_mob.is_some());
     }
 
     #[test]
-    fn advance_encounter_after_beach_boss_sets_in_town() {
+    fn beach_boss_triggers_fruit_scene_not_town() {
         let (mut state, _) = GameState::new_game();
         state.is_boss_encounter = true;
         state.current_area.id = "the_beach".to_string();
         if let Some(mob) = &mut state.current_mob {
-            mob.health = 0; // Simulate dead boss
+            mob.health = 0;
         }
-        
+
+        let advanced = state.advance_encounter();
+        assert!(advanced);
+        assert!(state.fruit_scene_active);
+        assert!(!state.in_town);
+        assert_eq!(state.pending_fruit_id, Some("fruit_of_instinct".to_string()));
+    }
+
+    #[test]
+    fn standard_mob_kill_on_beach_does_not_trigger_fruit_scene() {
+        let (mut state, _) = GameState::new_game();
+        state.is_boss_encounter = false;
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 0;
+        }
+
+        state.advance_encounter();
+        assert!(!state.fruit_scene_active);
+        assert!(state.pending_fruit_id.is_none());
+    }
+
+    #[test]
+    fn complete_fruit_scene_eats_fruit_and_clears_flag() {
+        let (mut state, _) = GameState::new_game();
+        state.fruit_scene_active = true;
+        state.pending_fruit_id = Some("fruit_of_instinct".to_string());
+
+        state.complete_fruit_scene();
+        assert!(!state.fruit_scene_active);
+        assert!(state.pending_fruit_id.is_none());
+        assert!(state.player.has_auto_combat());
+        assert_eq!(state.player.actions.len(), 1);
+    }
+
+    #[test]
+    fn complete_fruit_scene_noop_when_not_active() {
+        let (mut state, _) = GameState::new_game();
+        assert!(!state.fruit_scene_active);
+        state.complete_fruit_scene();
+        assert!(!state.player.has_auto_combat());
+        assert!(state.player.actions.is_empty());
+    }
+
+    #[test]
+    fn enter_area_transitions_correctly() {
+        let (mut state, _) = GameState::new_game();
+        state.encounters_cleared = 5;
+        state.in_town = true;
+
+        let success = state.enter_area("the_fringe");
+        assert!(success);
+        assert_eq!(state.current_area.id, "the_fringe");
+        assert_eq!(state.current_area.name, "The Fringe");
+        assert_eq!(state.encounters_cleared, 0);
+        assert!(state.current_mob.is_some());
+        assert!(!state.in_town);
+    }
+
+    #[test]
+    fn enter_area_fails_for_invalid_id() {
+        let (mut state, _) = GameState::new_game();
+        let success = state.enter_area("nonexistent_area");
+        assert!(!success);
+        assert_eq!(state.current_area.id, "the_beach");
+    }
+
+    #[test]
+    fn fringe_boss_triggers_town() {
+        let (mut state, _) = GameState::new_game();
+        state.current_area = Area::get_by_id("the_fringe").unwrap();
+        state.is_boss_encounter = true;
+        state.player.eat_fruit("fruit_of_instinct");
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 0;
+        }
+
         let advanced = state.advance_encounter();
         assert!(advanced);
         assert!(state.in_town);
-        assert!(!state.is_boss_encounter);
-        assert!(state.current_mob.is_none());
+        assert!(!state.fruit_scene_active);
+    }
+
+    #[test]
+    fn beach_boss_with_auto_combat_triggers_town() {
+        let (mut state, _) = GameState::new_game();
+        state.is_boss_encounter = true;
+        state.current_area.id = "the_beach".to_string();
+        state.player.eat_fruit("fruit_of_instinct");
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 0;
+        }
+
+        let advanced = state.advance_encounter();
+        assert!(advanced);
+        assert!(state.in_town);
+        assert!(!state.fruit_scene_active);
     }
 
     #[test]
     fn enter_boss_portal_spawns_boss() {
         let (mut state, mut rng) = GameState::new_game();
         state.current_area.bosses = vec!["rat_lord".to_string()];
-        state.current_area.base_encounter_amount = 0; // Allow instant boss query
-        state.encounters_cleared = 0; // Encounters >= base
-        
+        state.current_area.base_encounter_amount = 0;
+        state.encounters_cleared = 0;
+
         let success = state.enter_boss_portal(&mut rng);
         assert!(success);
         assert!(state.is_boss_encounter);
@@ -345,37 +439,21 @@ mod tests {
         state.is_boss_encounter = false;
         state.current_area.id = "the_beach".to_string();
         if let Some(mob) = &mut state.current_mob {
-            mob.health = 0; // Simulate dead standard mob
+            mob.health = 0;
         }
-        
+
         state.advance_encounter();
-        assert!(!state.in_town); // Standard mob should not transition to town
+        assert!(!state.in_town);
     }
 
     #[test]
     fn boss_portal_cannot_be_entered_early() {
         let (mut state, mut rng) = GameState::new_game();
         state.current_area.base_encounter_amount = 5;
-        state.encounters_cleared = 2; // Not enough cleared
-        
+        state.encounters_cleared = 2;
+
         let success = state.enter_boss_portal(&mut rng);
         assert!(!success);
         assert!(!state.is_boss_encounter);
-    }
-
-    #[test]
-    fn advance_encounter_after_non_beach_boss_does_not_set_in_town() {
-        let (mut state, _) = GameState::new_game();
-        state.is_boss_encounter = true;
-        state.current_area.id = "dark_forest".to_string(); // Non-beach area
-        if let Some(mob) = &mut state.current_mob {
-            mob.health = 0;
-        }
-
-        let advanced = state.advance_encounter();
-        assert!(advanced);
-        assert!(!state.in_town); // Should not set in town
-        assert!(!state.is_boss_encounter); 
-        assert!(state.current_mob.is_none());
     }
 }
