@@ -3,6 +3,7 @@ use yew::prelude::*;
 use quest_core::area::Area;
 use quest_core::mob::Mob;
 use quest_core::player::Player;
+use crate::components::health_bar::HealthBar;
 
 #[derive(Properties, PartialEq)]
 pub struct AreaScreenProps {
@@ -30,7 +31,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
             is_attacking_setter.set(true);
             cb.emit(());
             let setter = is_attacking_setter.clone();
-            gloo_timers::callback::Timeout::new(200, move || {
+            gloo_timers::callback::Timeout::new(400, move || {
                 setter.set(false);
             }).forget();
         })
@@ -40,12 +41,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         <div class="screen area-screen">
             <div class="area-header">
                 <div class="area-name">{ &props.area.name }</div>
-                <div class="player-info">
-                    <span class="player-name">{ &props.player.name }</span>
-                    <span class="player-hp">
-                        { format!("HP {}/{}", props.player.health, props.player.max_health) }
-                    </span>
-                </div>
             </div>
 
             <div class="area-body">
@@ -58,12 +53,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                 
                 {
                     if let Some(mob) = &props.current_mob {
-                        let hp_percent = if mob.max_health > 0 {
-                            (mob.health as f32 / mob.max_health as f32) * 100.0
-                        } else {
-                            0.0
-                        };
-                        
                         let anim_class = if *is_attacking {
                             "animating-attack"
                         } else if mob.is_dead() {
@@ -75,17 +64,11 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                         html! {
                             <div class={classes!("mob-hud", anim_class)}>
                                 <h3>{ &mob.name }</h3>
-                                <div>
-                                    <div class="hp-bar-container">
-                                        <div class="hp-bar-fill" style={format!("width: {}%;", hp_percent)}></div>
-                                    </div>
-                                    <div class="mob-hp-text">
-                                        { format!("HP: {}/{}", mob.health, mob.max_health) }
-                                    </div>
-                                </div>
-                                <button class="btn btn-primary" onclick={on_attack.clone()} disabled={mob.is_dead() || *is_attacking}>
-                                    { "Attack" }
-                                </button>
+                                <HealthBar 
+                                    current={mob.health} 
+                                    max={mob.max_health} 
+                                    label={Some("HP".to_string())} 
+                                />
                             </div>
                         }
                     } else {
@@ -99,9 +82,34 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
             </div>
 
             <div class="action-bar">
-                <button class="btn btn-danger" onclick={on_exit}>
-                    { "Exit Game" }
-                </button>
+                <div class="player-hud">
+                    <div class="player-name">{ &props.player.name }</div>
+                    <HealthBar 
+                        current={props.player.health} 
+                        max={props.player.max_health} 
+                        label={Some("HP".to_string())} 
+                    />
+                </div>
+                <div class="action-buttons">
+                    {
+                        if let Some(mob) = &props.current_mob {
+                            html! {
+                                <button class="btn btn-primary" onclick={on_attack.clone()} disabled={mob.is_dead() || *is_attacking}>
+                                    { "Attack" }
+                                </button>
+                            }
+                        } else {
+                            html! {
+                                <button class="btn btn-primary" disabled=true>
+                                    { "Attack" }
+                                </button>
+                            }
+                        }
+                    }
+                    <button class="btn btn-danger" onclick={on_exit}>
+                        { "Exit Game" }
+                    </button>
+                </div>
             </div>
         </div>
     }

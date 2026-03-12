@@ -127,7 +127,7 @@ impl Component for App {
                         
                         if is_dead {
                             let link = ctx.link().clone();
-                            gloo_timers::callback::Timeout::new(1000, move || {
+                            gloo_timers::callback::Timeout::new(2000, move || {
                                 link.send_message(AppMsg::AdvanceEncounter);
                             }).forget();
                         }

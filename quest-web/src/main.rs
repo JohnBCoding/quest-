@@ -1,6 +1,7 @@
 mod app;
 mod screens;
 mod storage;
+mod components;
 
 use app::App;
 

@@ -348,11 +348,29 @@ html, body {
 /* --- Action Bar (Mobile-First Bottom Bar) --- */
 .action-bar {
     display: flex;
-    gap: 0.8rem;
-    padding: 1rem 1.2rem;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1.5rem 1.2rem;
     border-top: 3px solid var(--c-purple);
     background: rgba(85, 65, 95, 0.15);
     flex-shrink: 0;
+}
+
+.player-hud {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.player-hud .player-name {
+    font-size: 0.8rem;
+    color: var(--c-blue);
+    text-transform: uppercase;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.8rem;
 }
 
 .action-bar .btn {
@@ -451,7 +469,7 @@ html, body {
 }
 
 .mob-hud.animating-attack {
-    animation: flashHit 0.2s steps(2, end) forwards;
+    animation: flashHit 0.4s steps(4, end) forwards;
 }
 
 @keyframes flashHit {
@@ -463,7 +481,7 @@ html, body {
 }
 
 .mob-hud.dead {
-    animation: deathFade 1s forwards;
+    animation: deathFade 2s forwards;
     pointer-events: none;
 }
 
@@ -493,9 +511,14 @@ html, body {
     transition: width 0.3s ease-out;
 }
 
-.mob-hp-text {
-    text-align: center;
+.mob-hp-text, .hp-bar-text {
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    transform: translateY(-50%);
     font-size: 0.7rem;
     color: var(--c-white);
-    margin-top: 0.5rem;
+    text-shadow: 1px 1px 0 #000;
+    pointer-events: none;
+    z-index: 2;
 }
