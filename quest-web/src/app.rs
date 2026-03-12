@@ -39,6 +39,8 @@ pub enum AppMsg {
     NewGame,
     LoadGame,
     ExitGame,
+    AttackMob,
+    AdvanceEncounter,
 }
 
 impl Component for App {
@@ -117,6 +119,33 @@ impl Component for App {
                 ctx.link().send_message(AppMsg::Navigate(Screen::MainMenu));
                 false
             }
+            AppMsg::AttackMob => {
+                if let Some(ref mut state) = self.game_state {
+                    if state.execute_attack() {
+                        let is_dead = state.current_mob.as_ref().map_or(false, |m| m.is_dead());
+                        storage::save_game(state);
+                        
+                        if is_dead {
+                            let link = ctx.link().clone();
+                            gloo_timers::callback::Timeout::new(2000, move || {
+                                link.send_message(AppMsg::AdvanceEncounter);
+                            }).forget();
+                        }
+                        
+                        return true;
+                    }
+                }
+                false
+            }
+            AppMsg::AdvanceEncounter => {
+                if let Some(ref mut state) = self.game_state {
+                    if state.advance_encounter() {
+                        storage::save_game(state);
+                        return true;
+                    }
+                }
+                false
+            }
         }
     }
 
@@ -140,12 +169,16 @@ impl Component for App {
             }
             Screen::InGame => {
                 let on_exit = ctx.link().callback(|_| AppMsg::ExitGame);
+                let on_attack = ctx.link().callback(|_| AppMsg::AttackMob);
                 if let Some(ref state) = self.game_state {
                     html! {
                         <AreaScreen
                             area={state.current_area.clone()}
                             player={state.player.clone()}
+                            current_mob={state.current_mob.clone()}
+                            encounters_cleared={state.encounters_cleared}
                             on_exit={on_exit}
+                            on_attack={on_attack}
                         />
                     }
                 } else {

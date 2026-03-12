@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::area::Area;
+use crate::mob::Mob;
 use crate::player::Player;
 use crate::rng::{RngManager, RngSnapshot};
 
@@ -9,6 +10,8 @@ use crate::rng::{RngManager, RngSnapshot};
 pub struct GameState {
     pub player: Player,
     pub current_area: Area,
+    pub current_mob: Option<Mob>,
+    pub encounters_cleared: u32,
     pub rng_snapshot: RngSnapshot,
     /// Schema version for future save compatibility.
     pub version: u32,
@@ -24,6 +27,8 @@ impl GameState {
         let state = Self {
             player: Player::default(),
             current_area: Area::starting_area(),
+            current_mob: Some(Mob::new("rat", 2)), 
+            encounters_cleared: 0,
             rng_snapshot: rng_manager.snapshot(),
             version: SAVE_VERSION,
         };
@@ -65,6 +70,35 @@ impl GameState {
     /// Updates the RNG snapshot in the state (call before saving).
     pub fn sync_rng(&mut self, rng: &RngManager) {
         self.rng_snapshot = rng.snapshot();
+    }
+
+    /// Executes an attack against the current mob, reducing its health by 2.
+    /// Returns `true` if a mob was attacked, `false` if there was no mob.
+    pub fn execute_attack(&mut self) -> bool {
+        if let Some(mob) = self.current_mob.as_mut() {
+            mob.take_damage(2);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Advances the encounter if the current mob is dead.
+    pub fn advance_encounter(&mut self) -> bool {
+        if let Some(mob) = &self.current_mob {
+            if mob.is_dead() {
+                self.encounters_cleared += 1;
+                
+                // Spawn next encounter if we haven't hit the area max limit yet.
+                if self.encounters_cleared < self.current_area.base_encounter_amount {
+                    self.current_mob = Some(Mob::new("rat", 2));
+                } else {
+                    self.current_mob = None;
+                }
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -165,5 +199,77 @@ mod tests {
         state.sync_rng(&rng);
         // Seeds themselves don't change, just verifying the method works
         assert_eq!(state.rng_snapshot.seeds, rng.snapshot().seeds);
+    }
+    
+    #[test]
+    fn execute_attack_reduces_hp_and_returns_true() {
+        let (mut state, _) = GameState::new_game();
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 5; // make it survive 2 damage
+        }
+        let result = state.execute_attack();
+        assert!(result);
+        assert_eq!(state.current_mob.unwrap().health, 3);
+        assert_eq!(state.encounters_cleared, 0);
+    }
+
+    #[test]
+    fn execute_attack_kills_mob_and_increments_encounters() {
+        let (mut state, _) = GameState::new_game();
+        // default mob (rat) has 2 health
+        let result = state.execute_attack();
+        assert!(result);
+        assert!(state.current_mob.as_ref().unwrap().is_dead());
+        assert_eq!(state.encounters_cleared, 0); // Not advanced yet
+        
+        let advanced = state.advance_encounter();
+        assert!(advanced);
+        assert_eq!(state.encounters_cleared, 1);
+        // checking the respawn mechanics
+        assert!(state.current_mob.is_some()); 
+        assert!(!state.current_mob.as_ref().unwrap().is_dead());
+    }
+
+    #[test]
+    fn execute_attack_stops_spawning_when_cap_reached() {
+        let (mut state, _) = GameState::new_game();
+        state.current_area.base_encounter_amount = 2; // only 2 encounters total
+        
+        // kill 1st
+        state.execute_attack();
+        state.advance_encounter();
+        assert_eq!(state.encounters_cleared, 1);
+        assert!(state.current_mob.is_some());
+        
+        // kill 2nd
+        state.execute_attack();
+        state.advance_encounter();
+        assert_eq!(state.encounters_cleared, 2);
+        assert!(state.current_mob.is_none()); // cap reached
+    }
+
+    #[test]
+    fn execute_attack_ignored_when_no_mob() {
+         let (mut state, _) = GameState::new_game();
+         state.current_mob = None;
+         let result = state.execute_attack();
+         assert!(!result);
+         assert_eq!(state.encounters_cleared, 0); // No state change recorded
+    }
+
+    #[test]
+    fn overkill_damage_clamps_at_zero() {
+        let (mut state, _) = GameState::new_game();
+        // simulate standard rat with 2 hp taking 2 damage = 0 health, it's alive during the check just for test isolation
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 1; 
+        }
+        state.execute_attack(); // Should deal 2 damage, dropping health from 1 to 0 without underflow
+        assert_eq!(state.current_mob.as_ref().unwrap().health, 0);
+        
+        state.advance_encounter();
+        assert_eq!(state.encounters_cleared, 1);
+        // verify spawned next
+        assert!(state.current_mob.is_some());
     }
 }
