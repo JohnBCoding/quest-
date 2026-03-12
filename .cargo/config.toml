@@ -1,0 +1,6 @@
+[build]
+target-dir = "target"
+
+[env]
+TMPDIR = { value = ".cargo/tmp", relative = true }
+CARGO_INCREMENTAL = { value = "0" }

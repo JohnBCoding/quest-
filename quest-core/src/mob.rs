@@ -9,6 +9,14 @@ pub struct Mob {
     pub name: String,
     pub health: u32,
     pub max_health: u32,
+    #[serde(default)]
+    pub base_damage: u32,
+    #[serde(default = "default_action_speed")]
+    pub action_speed_ms: u32,
+}
+
+fn default_action_speed() -> u32 {
+    1000
 }
 
 pub static MOB_REGISTRY: Lazy<HashMap<String, Mob>> = Lazy::new(|| {
@@ -19,6 +27,8 @@ pub static MOB_REGISTRY: Lazy<HashMap<String, Mob>> = Lazy::new(|| {
         id: String,
         name: String,
         health: u32,
+        base_damage: u32,
+        action_speed_ms: u32,
     }
     let parsed: Vec<MobData> = serde_json::from_str(json_data).expect("Failed to parse mobs.json");
     let mut registry = HashMap::new();
@@ -28,6 +38,8 @@ pub static MOB_REGISTRY: Lazy<HashMap<String, Mob>> = Lazy::new(|| {
             name: data.name,
             health: data.health,
             max_health: data.health, // Initialize max_health to base health
+            base_damage: data.base_damage,
+            action_speed_ms: data.action_speed_ms,
         });
     }
     registry
@@ -40,12 +52,14 @@ impl Mob {
     }
 
     /// Creates a new Mob with the given name and health.
-    pub fn new(id: &str, name: &str, health: u32) -> Self {
+    pub fn new(id: &str, name: &str, health: u32, base_damage: u32, action_speed_ms: u32) -> Self {
         Self {
             id: id.to_string(),
             name: name.to_string(),
             health,
             max_health: health,
+            base_damage,
+            action_speed_ms,
         }
     }
 
@@ -74,21 +88,25 @@ mod tests {
         let rat = Mob::get_by_id("rat").expect("Rat should be loaded from registry");
         assert_eq!(rat.name, "Rat");
         assert_eq!(rat.max_health, 2);
+        assert_eq!(rat.base_damage, 0);
+        assert_eq!(rat.action_speed_ms, 1000);
     }
 
     #[test]
     fn mob_creation() {
-        let mob = Mob::new("rat", "Rat", 2);
+        let mob = Mob::new("rat", "Rat", 2, 0, 1000);
         assert_eq!(mob.id, "rat");
         assert_eq!(mob.name, "Rat");
         assert_eq!(mob.health, 2);
         assert_eq!(mob.max_health, 2);
+        assert_eq!(mob.base_damage, 0);
+        assert_eq!(mob.action_speed_ms, 1000);
         assert!(!mob.is_dead());
     }
 
     #[test]
     fn take_damage() {
-        let mut mob = Mob::new("rat", "Rat", 2);
+        let mut mob = Mob::new("rat", "Rat", 2, 0, 1000);
         mob.take_damage(1);
         assert_eq!(mob.health, 1);
         assert!(!mob.is_dead());
