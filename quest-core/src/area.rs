@@ -1,6 +1,6 @@
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
 
 /// Represents a game area/zone the player can explore.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -63,7 +63,10 @@ mod tests {
 
     #[test]
     fn registry_loads_successfully() {
-        assert!(!AREA_REGISTRY.is_empty(), "Area registry should not be empty");
+        assert!(
+            !AREA_REGISTRY.is_empty(),
+            "Area registry should not be empty"
+        );
     }
 
     #[test]
@@ -81,7 +84,14 @@ mod tests {
 
     #[test]
     fn custom_area_creation() {
-        let area = Area::new("dark_forest", "Dark Forest", "Twisted trees block the sunlight.", vec!["the_beach".to_string()], 15, vec!["tree_ent".to_string()]);
+        let area = Area::new(
+            "dark_forest",
+            "Dark Forest",
+            "Twisted trees block the sunlight.",
+            vec!["the_beach".to_string()],
+            15,
+            vec!["tree_ent".to_string()],
+        );
         assert_eq!(area.id, "dark_forest");
         assert_eq!(area.name, "Dark Forest");
         assert_eq!(area.description, "Twisted trees block the sunlight.");

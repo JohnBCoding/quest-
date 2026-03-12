@@ -1,10 +1,10 @@
 use yew::prelude::*;
 
 use crate::screens::area::AreaScreen;
+use crate::screens::character_sheet::CharacterSheetScreen;
+use crate::screens::fruit_scene::FruitSceneScreen;
 use crate::screens::main_menu::MainMenuScreen;
 use crate::screens::town::TownScreen;
-use crate::screens::fruit_scene::FruitSceneScreen;
-use crate::screens::character_sheet::CharacterSheetScreen;
 use crate::storage;
 
 use quest_core::game_state::GameState;
@@ -200,7 +200,8 @@ impl Component for App {
                             let link = ctx.link().clone();
                             gloo_timers::callback::Timeout::new(2000, move || {
                                 link.send_message(AppMsg::AdvanceEncounter);
-                            }).forget();
+                            })
+                            .forget();
                         }
 
                         return true;
@@ -219,24 +220,30 @@ impl Component for App {
             }
             AppMsg::AdvanceEncounter => {
                 let mut needs_wipe = false;
-                
+
                 if let Some(ref mut state) = self.game_state {
                     // Check if this move will result in a screen change
-                    let is_beach_boss = state.is_boss_encounter && state.current_area.id == "the_beach";
-                    let is_other_boss = state.is_boss_encounter && state.current_area.id != "the_beach";
-                    let _is_last_encounter = !state.is_boss_encounter && state.encounters_cleared + 1 >= state.current_area.base_encounter_amount;
+                    let is_beach_boss =
+                        state.is_boss_encounter && state.current_area.id == "the_beach";
+                    let is_other_boss =
+                        state.is_boss_encounter && state.current_area.id != "the_beach";
+                    let _is_last_encounter = !state.is_boss_encounter
+                        && state.encounters_cleared + 1 >= state.current_area.base_encounter_amount;
 
                     // If boss death (beach -> fruit, other -> town) or area end (portal state), those are big shifts
                     // Actually, even portal state might be better without a wipe if we want the shimmer to show.
                     // The user said "boss portal ... already have animations".
-                    
+
                     if is_beach_boss || is_other_boss {
                         needs_wipe = true;
                     }
                 }
 
                 if needs_wipe {
-                    ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::AdvanceEncounter));
+                    ctx.link().send_message(AppMsg::NavigateWithLogic(
+                        Screen::InGame,
+                        PostTransitionLogic::AdvanceEncounter,
+                    ));
                     false
                 } else {
                     // Local change (regular mob or portal shimmer), handle instantly
@@ -262,19 +269,29 @@ impl Component for App {
                 state_changed
             }
             AppMsg::EatFruit => {
-                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::CharacterSheet, PostTransitionLogic::EatFruit));
+                ctx.link().send_message(AppMsg::NavigateWithLogic(
+                    Screen::CharacterSheet,
+                    PostTransitionLogic::EatFruit,
+                ));
                 false
             }
             AppMsg::CloseCharacterSheet => {
-                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::CloseCharacterSheet));
+                ctx.link().send_message(AppMsg::NavigateWithLogic(
+                    Screen::InGame,
+                    PostTransitionLogic::CloseCharacterSheet,
+                ));
                 false
             }
             AppMsg::OpenCharacterSheet => {
-                ctx.link().send_message(AppMsg::Navigate(Screen::CharacterSheet));
+                ctx.link()
+                    .send_message(AppMsg::Navigate(Screen::CharacterSheet));
                 false
             }
             AppMsg::TravelToArea(area_id) => {
-                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::TravelToArea(area_id)));
+                ctx.link().send_message(AppMsg::NavigateWithLogic(
+                    Screen::InGame,
+                    PostTransitionLogic::TravelToArea(area_id),
+                ));
                 false
             }
         }
@@ -306,7 +323,9 @@ impl Component for App {
                 if let Some(ref state) = self.game_state {
                     if state.in_town {
                         let on_open_cs = ctx.link().callback(|_| AppMsg::OpenCharacterSheet);
-                        let on_travel = ctx.link().callback(|_| AppMsg::TravelToArea("the_fringe".to_string()));
+                        let on_travel = ctx
+                            .link()
+                            .callback(|_| AppMsg::TravelToArea("the_fringe".to_string()));
                         html! {
                             <TownScreen
                                 has_auto_combat={state.player.has_auto_combat()}

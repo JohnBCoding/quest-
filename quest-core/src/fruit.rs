@@ -1,6 +1,6 @@
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Fruit {
@@ -27,7 +27,10 @@ impl Fruit {
     }
 
     pub fn get_by_drop_source(source_id: &str) -> Option<Self> {
-        FRUIT_REGISTRY.values().find(|f| f.drop_source == source_id).cloned()
+        FRUIT_REGISTRY
+            .values()
+            .find(|f| f.drop_source == source_id)
+            .cloned()
     }
 }
 
