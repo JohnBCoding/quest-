@@ -208,8 +208,35 @@ impl Component for App {
                 false
             }
             AppMsg::AdvanceEncounter => {
-                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::AdvanceEncounter));
-                false
+                let mut needs_wipe = false;
+                
+                if let Some(ref mut state) = self.game_state {
+                    // Check if this move will result in a screen change
+                    let is_beach_boss = state.is_boss_encounter && state.current_area.id == "the_beach";
+                    let is_other_boss = state.is_boss_encounter && state.current_area.id != "the_beach";
+                    let _is_last_encounter = !state.is_boss_encounter && state.encounters_cleared + 1 >= state.current_area.base_encounter_amount;
+
+                    // If boss death (beach -> fruit, other -> town) or area end (portal state), those are big shifts
+                    // Actually, even portal state might be better without a wipe if we want the shimmer to show.
+                    // The user said "boss portal ... already have animations".
+                    
+                    if is_beach_boss || is_other_boss {
+                        needs_wipe = true;
+                    }
+                }
+
+                if needs_wipe {
+                    ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::AdvanceEncounter));
+                    false
+                } else {
+                    // Local change (regular mob or portal shimmer), handle instantly
+                    if let Some(ref mut state) = self.game_state {
+                        if state.advance_encounter() {
+                            storage::save_game(state);
+                        }
+                    }
+                    true
+                }
             }
             AppMsg::EnterPortal => {
                 let mut state_changed = false;
