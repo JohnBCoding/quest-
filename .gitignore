@@ -1,0 +1,20 @@
+# Build artifacts
+/target/
+quest-web/dist/
+
+# Cargo lock is fine for apps, but let's track it
+# Cargo.lock  
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+*Zone.Identifier*
+
+# WASM
+*.wasm.d
