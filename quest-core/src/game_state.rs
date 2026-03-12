@@ -13,12 +13,14 @@ pub struct GameState {
     pub current_mob: Option<Mob>,
     pub encounters_cleared: u32,
     pub rng_snapshot: RngSnapshot,
+    pub is_boss_encounter: bool,
+    pub in_town: bool,
     /// Schema version for future save compatibility.
     pub version: u32,
 }
 
 /// Current schema version. Bump this when the save format changes.
-pub const SAVE_VERSION: u32 = 1;
+pub const SAVE_VERSION: u32 = 2;
 
 impl GameState {
     /// Creates a brand new game with default player and starting area.
@@ -27,9 +29,11 @@ impl GameState {
         let state = Self {
             player: Player::default(),
             current_area: Area::starting_area(),
-            current_mob: Some(Mob::new("rat", 2)), 
+            current_mob: Mob::get_by_id("rat"), 
             encounters_cleared: 0,
             rng_snapshot: rng_manager.snapshot(),
+            is_boss_encounter: false,
+            in_town: false,
             version: SAVE_VERSION,
         };
         (state, rng_manager)
@@ -87,18 +91,51 @@ impl GameState {
     pub fn advance_encounter(&mut self) -> bool {
         if let Some(mob) = &self.current_mob {
             if mob.is_dead() {
-                self.encounters_cleared += 1;
-                
-                // Spawn next encounter if we haven't hit the area max limit yet.
-                if self.encounters_cleared < self.current_area.base_encounter_amount {
-                    self.current_mob = Some(Mob::new("rat", 2));
-                } else {
+                if self.is_boss_encounter {
+                    if self.current_area.id == "the_beach" {
+                        self.in_town = true;
+                    }
                     self.current_mob = None;
+                    self.is_boss_encounter = false;
+                } else {
+                    self.encounters_cleared += 1;
+                    
+                    // Spawn next encounter if we haven't hit the area max limit yet.
+                    if self.encounters_cleared < self.current_area.base_encounter_amount {
+                        self.current_mob = Mob::get_by_id("rat");
+                    } else {
+                        self.current_mob = None;
+                    }
                 }
                 return true;
             }
         }
         false
+    }
+
+    /// Enters the boss portal for the current area. 
+    /// Returns true if a boss was successfully spawned.
+    pub fn enter_boss_portal(&mut self, rng: &mut RngManager) -> bool {
+        if self.encounters_cleared < self.current_area.base_encounter_amount {
+            return false;
+        }
+
+        if self.current_area.bosses.is_empty() {
+            return false;
+        }
+
+        let max_idx = self.current_area.bosses.len() as u32 - 1;
+        let boss_idx = rng.gen_range("mob_spawns", 0, max_idx) as usize;
+        let boss_id = &self.current_area.bosses[boss_idx];
+        
+        if let Some(boss_mob) = Mob::get_by_id(boss_id) {
+            self.current_mob = Some(boss_mob);
+            self.is_boss_encounter = true;
+            self.sync_rng(rng);
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -271,5 +308,74 @@ mod tests {
         assert_eq!(state.encounters_cleared, 1);
         // verify spawned next
         assert!(state.current_mob.is_some());
+    }
+
+    #[test]
+    fn advance_encounter_after_beach_boss_sets_in_town() {
+        let (mut state, _) = GameState::new_game();
+        state.is_boss_encounter = true;
+        state.current_area.id = "the_beach".to_string();
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 0; // Simulate dead boss
+        }
+        
+        let advanced = state.advance_encounter();
+        assert!(advanced);
+        assert!(state.in_town);
+        assert!(!state.is_boss_encounter);
+        assert!(state.current_mob.is_none());
+    }
+
+    #[test]
+    fn enter_boss_portal_spawns_boss() {
+        let (mut state, mut rng) = GameState::new_game();
+        state.current_area.bosses = vec!["rat_lord".to_string()];
+        state.current_area.base_encounter_amount = 0; // Allow instant boss query
+        state.encounters_cleared = 0; // Encounters >= base
+        
+        let success = state.enter_boss_portal(&mut rng);
+        assert!(success);
+        assert!(state.is_boss_encounter);
+        assert_eq!(state.current_mob.unwrap().id, "rat_lord");
+    }
+
+    #[test]
+    fn advance_encounter_after_standard_mob_does_not_set_in_town() {
+        let (mut state, _) = GameState::new_game();
+        state.is_boss_encounter = false;
+        state.current_area.id = "the_beach".to_string();
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 0; // Simulate dead standard mob
+        }
+        
+        state.advance_encounter();
+        assert!(!state.in_town); // Standard mob should not transition to town
+    }
+
+    #[test]
+    fn boss_portal_cannot_be_entered_early() {
+        let (mut state, mut rng) = GameState::new_game();
+        state.current_area.base_encounter_amount = 5;
+        state.encounters_cleared = 2; // Not enough cleared
+        
+        let success = state.enter_boss_portal(&mut rng);
+        assert!(!success);
+        assert!(!state.is_boss_encounter);
+    }
+
+    #[test]
+    fn advance_encounter_after_non_beach_boss_does_not_set_in_town() {
+        let (mut state, _) = GameState::new_game();
+        state.is_boss_encounter = true;
+        state.current_area.id = "dark_forest".to_string(); // Non-beach area
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 0;
+        }
+
+        let advanced = state.advance_encounter();
+        assert!(advanced);
+        assert!(!state.in_town); // Should not set in town
+        assert!(!state.is_boss_encounter); 
+        assert!(state.current_mob.is_none());
     }
 }

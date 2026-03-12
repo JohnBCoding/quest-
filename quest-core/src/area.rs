@@ -12,6 +12,8 @@ pub struct Area {
     pub connected_areas: Vec<String>,
     #[serde(default)]
     pub base_encounter_amount: u32,
+    #[serde(default)]
+    pub bosses: Vec<String>,
 }
 
 pub static AREA_REGISTRY: Lazy<HashMap<String, Area>> = Lazy::new(|| {
@@ -32,6 +34,7 @@ impl Area {
         description: &str,
         connected_areas: Vec<String>,
         base_encounter_amount: u32,
+        bosses: Vec<String>,
     ) -> Self {
         Self {
             id: id.to_string(),
@@ -39,6 +42,7 @@ impl Area {
             description: description.to_string(),
             connected_areas,
             base_encounter_amount,
+            bosses,
         }
     }
 
@@ -77,12 +81,13 @@ mod tests {
 
     #[test]
     fn custom_area_creation() {
-        let area = Area::new("dark_forest", "Dark Forest", "Twisted trees block the sunlight.", vec!["the_beach".to_string()], 15);
+        let area = Area::new("dark_forest", "Dark Forest", "Twisted trees block the sunlight.", vec!["the_beach".to_string()], 15, vec!["tree_ent".to_string()]);
         assert_eq!(area.id, "dark_forest");
         assert_eq!(area.name, "Dark Forest");
         assert_eq!(area.description, "Twisted trees block the sunlight.");
         assert_eq!(area.connected_areas, vec!["the_beach"]);
         assert_eq!(area.base_encounter_amount, 15);
+        assert_eq!(area.bosses, vec!["tree_ent"]);
     }
 
     #[test]

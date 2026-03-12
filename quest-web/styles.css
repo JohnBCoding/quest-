@@ -290,9 +290,101 @@ html, body {
     box-shadow: 0 0 15px rgba(215, 115, 85, 0.3);
 }
 
+.btn-warning {
+    color: var(--c-gold);
+    border-color: var(--c-gold);
+}
+
+.btn-warning:hover {
+    background: var(--c-gold);
+    color: var(--c-bg);
+    box-shadow: 0 0 15px rgba(230, 200, 110, 0.3);
+}
+
 /* --- Area Screen --- */
 .area-screen {
     padding: 0;
+}
+
+.area-cleared {
+    margin: 2rem auto;
+    padding: 2rem;
+    border: 3px dashed var(--c-gold);
+    background: rgba(230, 200, 110, 0.05);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    align-items: center;
+    max-width: 400px;
+    animation: portalPulse 2s ease-in-out infinite;
+}
+
+.area-cleared p {
+    font-size: 0.9rem;
+    color: var(--c-gold);
+    line-height: 1.6;
+}
+
+@keyframes portalPulse {
+    0%, 100% { border-color: var(--c-gold); box-shadow: 0 0 5px var(--c-gold); }
+    50% { border-color: var(--c-purple); box-shadow: 0 0 20px rgba(230, 200, 110, 0.4); }
+}
+
+.portal-spawn {
+    position: relative;
+    overflow: hidden;
+    border-style: double;
+    border-width: 6px;
+}
+
+.portal-entrance {
+    animation: portalOpen 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes portalOpen {
+    0% {
+        transform: scaleX(0);
+        opacity: 0;
+        filter: brightness(5) blur(10px);
+        box-shadow: 0 0 0 rgba(230, 200, 110, 0);
+        border-color: var(--c-purple);
+    }
+    50% {
+        transform: scaleX(1.0);
+        opacity: 1;
+        filter: brightness(2) blur(2px);
+        box-shadow: 0 0 30px var(--c-gold);
+        border-color: var(--c-gold);
+    }
+    100% {
+        transform: scaleX(1);
+        opacity: 1;
+        filter: brightness(1) blur(0);
+        box-shadow: 0 0 5px var(--c-gold);
+        border-color: var(--c-gold);
+    }
+}
+
+.portal-shimmer {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 200%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(230, 200, 110, 0.1),
+        transparent
+    );
+    animation: portalShimmer 3s infinite linear;
+    pointer-events: none;
+}
+
+@keyframes portalShimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
 }
 
 .area-header {
@@ -461,6 +553,7 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+    width: 92%;
     max-width: 400px;
     margin-left: auto;
     margin-right: auto;
@@ -469,14 +562,15 @@ html, body {
 }
 
 .mob-hud.animating-attack {
-    animation: flashHit 0.4s steps(4, end) forwards;
+    /* Higher priority to override boss animations */
+    animation: flashHit 0.4s steps(4, end) !important;
 }
 
 @keyframes flashHit {
     0% { transform: translateX(0); filter: invert(0); }
-    25% { transform: translateX(-10px); filter: invert(1); }
-    50% { transform: translateX(10px); filter: invert(0); }
-    75% { transform: translateX(-10px); filter: invert(1); }
+    25% { transform: translateX(-8px); filter: invert(1); }
+    50% { transform: translateX(8px); filter: invert(0); }
+    75% { transform: translateX(-8px); filter: invert(1); }
     100% { transform: translateX(0); filter: invert(0); }
 }
 
@@ -495,6 +589,50 @@ html, body {
     text-align: center;
     font-size: 1.2rem;
     text-transform: uppercase;
+}
+
+/* --- Boss Specific --- */
+.mob-hud.boss-encounter {
+    border-color: var(--c-gold);
+    border-style: double;
+    border-width: 6px;
+    box-shadow: 0 0 30px rgba(230, 200, 110, 0.5);
+    background: rgba(230, 200, 110, 0.1);
+}
+
+.mob-hud.spawning-boss {
+    animation: bossSpawn 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.boss-encounter h3 {
+    color: var(--c-gold) !important;
+    text-shadow: 2px 2px 0 var(--c-orange), 0 0 15px rgba(230, 200, 110, 0.6);
+    font-size: 1.6rem !important;
+    letter-spacing: 0.2em;
+    animation: bossTitlePulse 2s ease-in-out infinite;
+}
+
+@keyframes bossSpawn {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+        filter: brightness(5) contrast(1.5);
+    }
+    70% {
+        transform: scale(1.0);
+        opacity: 1;
+        filter: brightness(1.5) contrast(1.2);
+    }
+    100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+        filter: brightness(1) contrast(1);
+    }
+}
+
+@keyframes bossTitlePulse {
+    0%, 100% { transform: scale(1); text-shadow: 2px 2px 0 var(--c-orange), 0 0 15px rgba(230, 200, 110, 0.6); }
+    50% { transform: scale(1.05); text-shadow: 2px 2px 0 var(--c-orange), 0 0 25px var(--c-gold); }
 }
 
 .hp-bar-container {
