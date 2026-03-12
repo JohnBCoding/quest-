@@ -11,7 +11,13 @@ pub struct FruitSceneProps {
 #[function_component(FruitSceneScreen)]
 pub fn fruit_scene_screen(props: &FruitSceneProps) -> Html {
     let phase = use_state(|| 0u8);
-    let fruit = Fruit::get_by_id(&props.fruit_id);
+
+    let initial_fruit_id = use_state({
+        let id = props.fruit_id.clone();
+        move || id
+    });
+
+    let fruit = Fruit::get_by_id(&initial_fruit_id);
 
     let fruit_name = fruit
         .as_ref()

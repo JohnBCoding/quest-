@@ -24,6 +24,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     let is_spawning = use_state(|| false);
     let is_portal_spawning = use_state(|| false);
     let action_progress = use_state(|| 0.0f64);
+    let action_progress_ref = use_mut_ref(|| 0.0f64);
     let action_flash = use_state(|| false);
 
     // Boss spawn animation
@@ -69,7 +70,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
 
     // Auto-combat action bar timer
     {
-        let progress = action_progress.clone();
+        let progress_state = action_progress.clone();
+        let progress_ref = action_progress_ref.clone();
         let flash = action_flash.clone();
         let has_auto = props.has_auto_combat;
         let has_mob = props.current_mob.as_ref().map_or(false, |m| !m.is_dead());
@@ -84,27 +86,33 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                 if *auto && *mob_alive {
                     let tick_ms = 50u32;
                     let increment = (tick_ms as f64 / *speed as f64) * 100.0;
-                    let progress_handle = progress.clone();
+                    let ref_handle = progress_ref.clone();
+                    let state_handle = progress_state.clone();
                     let flash_handle = flash.clone();
                     let attack_cb = on_attack_cb.clone();
 
+                    *ref_handle.borrow_mut() = 0.0;
+
                     interval_handle = Some(gloo_timers::callback::Interval::new(tick_ms, move || {
-                        let current = *progress_handle + increment;
-                        if current >= 100.0 {
+                        let mut val = ref_handle.borrow_mut();
+                        *val += increment;
+                        if *val >= 100.0 {
                             flash_handle.set(true);
                             attack_cb.emit(());
-                            progress_handle.set(0.0);
+                            *val = 0.0;
+                            state_handle.set(0.0);
                             let flash_reset = flash_handle.clone();
                             gloo_timers::callback::Timeout::new(300, move || {
                                 flash_reset.set(false);
                             })
                             .forget();
                         } else {
-                            progress_handle.set(current);
+                            state_handle.set(*val);
                         }
                     }));
                 } else {
-                    progress.set(0.0);
+                    *progress_ref.borrow_mut() = 0.0;
+                    progress_state.set(0.0);
                 }
 
                 move || drop(interval_handle)

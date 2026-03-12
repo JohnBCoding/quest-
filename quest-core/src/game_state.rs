@@ -263,6 +263,7 @@ mod tests {
     #[test]
     fn execute_attack_kills_mob_and_increments_encounters() {
         let (mut state, _) = GameState::new_game();
+        state.current_area.base_encounter_amount = 10;
         let result = state.execute_attack();
         assert!(result);
         assert!(state.current_mob.as_ref().unwrap().is_dead());
@@ -303,6 +304,7 @@ mod tests {
     #[test]
     fn overkill_damage_clamps_at_zero() {
         let (mut state, _) = GameState::new_game();
+        state.current_area.base_encounter_amount = 10;
         if let Some(mob) = &mut state.current_mob {
             mob.health = 1;
         }

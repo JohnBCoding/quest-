@@ -4,7 +4,7 @@
         "name": "The Beach",
         "description": "Waves crash against the sandy shore. The air is thick with salt and mystery. This is where your journey begins.",
         "connected_areas": [],
-        "base_encounter_amount": 10,
+        "base_encounter_amount": 1,
         "bosses": [
             "rat_lord"
         ]
@@ -14,7 +14,7 @@
         "name": "The Fringe",
         "description": "The edge of the known world. Familiar creatures lurk here, but the air feels different — charged with possibility.",
         "connected_areas": [],
-        "base_encounter_amount": 10,
+        "base_encounter_amount": 2,
         "bosses": [
             "rat_lord"
         ]
