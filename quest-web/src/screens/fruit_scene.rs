@@ -86,7 +86,7 @@ pub fn fruit_scene_screen(props: &FruitSceneProps) -> Html {
                                         <div class="fruit-icon fruit-glow">{"🍎"}</div>
                                     </div>
                                     <p class="scene-text scene-text-fade">
-                                        {"Something falls from the creature..."}
+                                        {"Something falls from the creature's mouth..."}
                                     </p>
                                 </>
                             },
@@ -94,7 +94,7 @@ pub fn fruit_scene_screen(props: &FruitSceneProps) -> Html {
                                 <>
                                     <div class="fruit-icon fruit-glow fruit-landed">{"🍎"}</div>
                                     <p class="scene-text scene-text-fade">
-                                        {"A strange fruit pulses with energy. You wonder what it could be..."}
+                                        {"A strange fruit that pulses with energy. You wonder what it could be..."}
                                     </p>
                                 </>
                             },
