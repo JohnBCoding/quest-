@@ -11,6 +11,7 @@ pub struct AreaScreenProps {
     pub player: Player,
     pub current_mob: Option<Mob>,
     pub encounters_cleared: u32,
+    pub is_boss: bool,
     pub on_exit: Callback<()>,
     pub on_attack: Callback<()>,
     pub on_enter_portal: Callback<()>,
@@ -19,6 +20,49 @@ pub struct AreaScreenProps {
 #[function_component(AreaScreen)]
 pub fn area_screen(props: &AreaScreenProps) -> Html {
     let is_attacking = use_state(|| false);
+    let is_spawning = use_state(|| false);
+    let is_portal_spawning = use_state(|| false);
+
+    // Trigger spawn animation when a boss appears
+    {
+        let is_spawning_setter = is_spawning.clone();
+        let is_boss = props.is_boss;
+        let mob_id = props.current_mob.as_ref().map(|m| m.id.clone());
+        use_effect_with(
+            (is_boss, mob_id),
+            move |_| {
+                if is_boss {
+                    is_spawning_setter.set(true);
+                    let setter = is_spawning_setter.clone();
+                    gloo_timers::callback::Timeout::new(1200, move || {
+                        setter.set(false);
+                    })
+                    .forget();
+                }
+                || ()
+            },
+        );
+    }
+
+    // Trigger portal spawn animation
+    {
+        let is_portal_spawning_setter = is_portal_spawning.clone();
+        let can_show_portal = props.current_mob.is_none() && props.encounters_cleared >= props.area.base_encounter_amount;
+        use_effect_with(
+            can_show_portal,
+            move |&can_show| {
+                if can_show {
+                    is_portal_spawning_setter.set(true);
+                    let setter = is_portal_spawning_setter.clone();
+                    gloo_timers::callback::Timeout::new(1000, move || {
+                        setter.set(false);
+                    })
+                    .forget();
+                }
+                || ()
+            }
+        );
+    }
 
     let on_exit = {
         let cb = props.on_exit.clone();
@@ -39,7 +83,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
             let setter = is_attacking_setter.clone();
             gloo_timers::callback::Timeout::new(400, move || {
                 setter.set(false);
-            }).forget();
+            })
+            .forget();
         })
     };
 
@@ -67,8 +112,11 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                             ""
                         };
 
+                        let boss_class = if props.is_boss { "boss-encounter" } else { "" };
+                        let spawn_class = if *is_spawning { "spawning-boss" } else { "" };
+
                         html! {
-                            <div class={classes!("mob-hud", anim_class)}>
+                            <div class={classes!("mob-hud", anim_class, boss_class, spawn_class)}>
                                 <h3>{ &mob.name }</h3>
                                 <HealthBar 
                                     current={mob.health} 
@@ -78,8 +126,10 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                             </div>
                         }
                     } else if props.encounters_cleared >= props.area.base_encounter_amount {
+                        let portal_anim_class = if *is_portal_spawning { "portal-entrance" } else { "" };
                         html! {
-                            <div class="area-cleared">
+                            <div class={classes!("area-cleared", "portal-spawn", portal_anim_class)}>
+                                <div class="portal-shimmer"></div>
                                 <p>{ "The air shimmers with dark energy..." }</p>
                                 <button class="btn btn-warning" onclick={on_enter_portal}>
                                     { "Enter Mysterious Portal" }

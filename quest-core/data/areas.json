@@ -5,6 +5,8 @@
         "description": "Waves crash against the sandy shore. The air is thick with salt and mystery. This is where your journey begins.",
         "connected_areas": [],
         "base_encounter_amount": 10,
-        "bosses": ["rat_lord"]
+        "bosses": [
+            "rat_lord"
+        ]
     }
 ]

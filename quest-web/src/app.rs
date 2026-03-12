@@ -200,6 +200,7 @@ impl Component for App {
                                 player={state.player.clone()}
                                 current_mob={state.current_mob.clone()}
                                 encounters_cleared={state.encounters_cleared}
+                                is_boss={state.is_boss_encounter}
                                 on_exit={on_exit}
                                 on_attack={on_attack}
                                 on_enter_portal={on_enter_portal}
