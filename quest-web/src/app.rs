@@ -2,6 +2,7 @@ use yew::prelude::*;
 
 use crate::screens::area::AreaScreen;
 use crate::screens::main_menu::MainMenuScreen;
+use crate::screens::town::TownScreen;
 use crate::storage;
 
 use quest_core::game_state::GameState;
@@ -41,6 +42,7 @@ pub enum AppMsg {
     ExitGame,
     AttackMob,
     AdvanceEncounter,
+    EnterPortal,
 }
 
 impl Component for App {
@@ -146,6 +148,19 @@ impl Component for App {
                 }
                 false
             }
+            AppMsg::EnterPortal => {
+                let mut state_changed = false;
+                if let Some(ref mut state) = self.game_state {
+                    if let Some(mut rng) = self.rng_manager.take() {
+                        if state.enter_boss_portal(&mut rng) {
+                            storage::save_game(state);
+                            state_changed = true;
+                        }
+                        self.rng_manager = Some(rng);
+                    }
+                }
+                state_changed
+            }
         }
     }
 
@@ -170,16 +185,26 @@ impl Component for App {
             Screen::InGame => {
                 let on_exit = ctx.link().callback(|_| AppMsg::ExitGame);
                 let on_attack = ctx.link().callback(|_| AppMsg::AttackMob);
+                let on_enter_portal = ctx.link().callback(|_| AppMsg::EnterPortal);
                 if let Some(ref state) = self.game_state {
-                    html! {
-                        <AreaScreen
-                            area={state.current_area.clone()}
-                            player={state.player.clone()}
-                            current_mob={state.current_mob.clone()}
-                            encounters_cleared={state.encounters_cleared}
-                            on_exit={on_exit}
-                            on_attack={on_attack}
-                        />
+                    if state.in_town {
+                        html! {
+                            <TownScreen
+                                on_exit={on_exit}
+                            />
+                        }
+                    } else {
+                        html! {
+                            <AreaScreen
+                                area={state.current_area.clone()}
+                                player={state.player.clone()}
+                                current_mob={state.current_mob.clone()}
+                                encounters_cleared={state.encounters_cleared}
+                                on_exit={on_exit}
+                                on_attack={on_attack}
+                                on_enter_portal={on_enter_portal}
+                            />
+                        }
                     }
                 } else {
                     html! { <div class="screen">{ "Error: No game state" }</div> }

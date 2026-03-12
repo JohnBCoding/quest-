@@ -13,6 +13,7 @@ pub struct AreaScreenProps {
     pub encounters_cleared: u32,
     pub on_exit: Callback<()>,
     pub on_attack: Callback<()>,
+    pub on_enter_portal: Callback<()>,
 }
 
 #[function_component(AreaScreen)]
@@ -21,6 +22,11 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
 
     let on_exit = {
         let cb = props.on_exit.clone();
+        Callback::from(move |_: MouseEvent| cb.emit(()))
+    };
+
+    let on_enter_portal = {
+        let cb = props.on_enter_portal.clone();
         Callback::from(move |_: MouseEvent| cb.emit(()))
     };
 
@@ -69,6 +75,15 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                                     max={mob.max_health} 
                                     label={Some("HP".to_string())} 
                                 />
+                            </div>
+                        }
+                    } else if props.encounters_cleared >= props.area.base_encounter_amount {
+                        html! {
+                            <div class="area-cleared">
+                                <p>{ "The air shimmers with dark energy..." }</p>
+                                <button class="btn btn-warning" onclick={on_enter_portal}>
+                                    { "Enter Mysterious Portal" }
+                                </button>
                             </div>
                         }
                     } else {
