@@ -522,6 +522,27 @@ html, body {
     transition: width 0.2s linear;
 }
 
+.player-potion-hud {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    align-self: flex-start;
+    border: 2px solid var(--c-green);
+    background: rgba(100, 185, 100, 0.12);
+    padding: 0.35rem 0.6rem;
+}
+
+.potion-hud-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.potion-hud-count {
+    font-size: 0.7rem;
+    color: var(--c-green);
+    letter-spacing: 0.08em;
+}
+
 .action-buttons {
     display: flex;
     gap: 0.8rem;
@@ -914,32 +935,8 @@ html, body {
     padding-bottom: 0.5rem;
 }
 
-.actions-header-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-}
-
-.actions-header-row h2 {
-    margin-bottom: 0;
-}
-
-.configure-actions-btn {
-    width: 3rem;
-    height: 3rem;
-    border: 2px solid var(--c-blue);
-    background: transparent;
-    color: var(--c-blue);
-    font-family: var(--font-main);
-    font-size: 1.4rem;
-    line-height: 1;
-    cursor: pointer;
-}
-
-.configure-actions-btn:hover {
-    background: var(--c-blue);
-    color: var(--c-bg);
+.configure-actions-cta {
+    margin-top: 0.9rem;
 }
 
 .actions-description {
@@ -982,13 +979,36 @@ html, body {
     line-height: 1.5;
 }
 
+.action-main-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
 .configure-list .action-row {
     cursor: grab;
+    gap: 0.8rem;
+    align-items: flex-start;
 }
 
 .action-row-draggable.dragging {
     opacity: 0.5;
     border-color: var(--c-blue);
+}
+
+.action-reorder-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: 5.5rem;
+    flex-shrink: 0;
+}
+
+.action-move-btn {
+    font-size: 0.65rem;
+    padding: 0.35rem 0.25rem;
+    width: 100%;
 }
 
 .configure-footer-actions {

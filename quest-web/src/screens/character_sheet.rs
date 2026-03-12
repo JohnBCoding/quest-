@@ -109,87 +109,97 @@ pub fn character_sheet_screen(props: &CharacterSheetProps) -> Html {
             </div>
 
             <div class="character-sheet-body">
-                <div class="actions-section">
-                    {
-                        if *is_configuring {
-                            html! {
-                                <>
-                                    <h2>{"Configure Actions"}</h2>
-                                    <p class="actions-description">
-                                        {"Drag and drop actions to change combat priority (top runs first)."}
-                                    </p>
-                                    <div class="actions-list configure-list">
-                                        {
-                                            if draft_actions.is_empty() {
-                                                html! {
-                                                    <div class="action-row empty">
-                                                        <span class="action-name">{"No actions configured"}</span>
-                                                    </div>
-                                                }
-                                            } else {
-                                                html! {
-                                                    { for draft_actions.iter().enumerate().map(|(idx, action)| {
-                                                        let dragged_index_state = dragged_index.clone();
-                                                        let dragged_index_for_start = dragged_index_state.clone();
-                                                        let ondragstart = Callback::from(move |e: DragEvent| {
-                                                            if let Some(data) = e.data_transfer() {
-                                                                let _ = data.set_data("text/plain", &idx.to_string());
-                                                            }
-                                                            dragged_index_for_start.set(Some(idx));
-                                                        });
+                {
+                    if *is_configuring {
+                        let action_len = draft_actions.len();
+                        html! {
+                            <div class="actions-section">
+                                <h2>{"Configure Actions"}</h2>
+                                <p class="actions-description">
+                                    {"Drag and drop actions to change combat priority (top runs first). On mobile, use the up/down buttons."}
+                                </p>
+                                <div class="actions-list configure-list">
+                                    {
+                                        if draft_actions.is_empty() {
+                                            html! {
+                                                <div class="action-row empty">
+                                                    <span class="action-name">{"No actions configured"}</span>
+                                                </div>
+                                            }
+                                        } else {
+                                            html! {
+                                                { for draft_actions.iter().enumerate().map(|(idx, action)| {
+                                                    let dragged_index_state = dragged_index.clone();
+                                                    let dragged_index_for_start = dragged_index_state.clone();
+                                                    let ondragstart = Callback::from(move |e: DragEvent| {
+                                                        if let Some(data) = e.data_transfer() {
+                                                            let _ = data.set_data("text/plain", &idx.to_string());
+                                                        }
+                                                        dragged_index_for_start.set(Some(idx));
+                                                    });
 
-                                                        let ondragover = Callback::from(|e: DragEvent| {
-                                                            e.prevent_default();
-                                                        });
+                                                    let ondragover = Callback::from(|e: DragEvent| {
+                                                        e.prevent_default();
+                                                    });
 
-                                                        let dragged_index_for_drop = dragged_index_state.clone();
-                                                        let draft_actions_for_drop = draft_actions.clone();
-                                                        let ondrop = Callback::from(move |e: DragEvent| {
-                                                            e.prevent_default();
-                                                            if let Some(from) = *dragged_index_for_drop {
-                                                                let next = move_action(draft_actions_for_drop.as_ref(), from, idx);
-                                                                draft_actions_for_drop.set(next);
-                                                                dragged_index_for_drop.set(None);
-                                                            }
-                                                        });
+                                                    let dragged_index_for_drop = dragged_index_state.clone();
+                                                    let draft_actions_for_drop = draft_actions.clone();
+                                                    let ondrop = Callback::from(move |e: DragEvent| {
+                                                        e.prevent_default();
+                                                        if let Some(from) = *dragged_index_for_drop {
+                                                            let next = move_action(draft_actions_for_drop.as_ref(), from, idx);
+                                                            draft_actions_for_drop.set(next);
+                                                            dragged_index_for_drop.set(None);
+                                                        }
+                                                    });
 
-                                                        let dragged = *dragged_index_state == Some(idx);
-                                                        html! {
-                                                            <div
-                                                                class={classes!("action-row", "action-row-draggable", if dragged { Some("dragging") } else { None })}
-                                                                draggable={"true"}
-                                                                {ondragstart}
-                                                                {ondragover}
-                                                                {ondrop}
-                                                            >
+                                                    let draft_actions_for_up = draft_actions.clone();
+                                                    let on_move_up = Callback::from(move |_: MouseEvent| {
+                                                        if idx > 0 {
+                                                            let next = move_action(draft_actions_for_up.as_ref(), idx, idx - 1);
+                                                            draft_actions_for_up.set(next);
+                                                        }
+                                                    });
+
+                                                    let draft_actions_for_down = draft_actions.clone();
+                                                    let on_move_down = Callback::from(move |_: MouseEvent| {
+                                                        if idx + 1 < action_len {
+                                                            let next = move_action(draft_actions_for_down.as_ref(), idx, idx + 1);
+                                                            draft_actions_for_down.set(next);
+                                                        }
+                                                    });
+
+                                                    let dragged = *dragged_index_state == Some(idx);
+                                                    html! {
+                                                        <div
+                                                            class={classes!("action-row", "action-row-draggable", if dragged { Some("dragging") } else { None })}
+                                                            draggable={"true"}
+                                                            {ondragstart}
+                                                            {ondragover}
+                                                            {ondrop}
+                                                        >
+                                                            <div class="action-main-info">
                                                                 <span class="action-name">{format!("{} {}", idx + 1, action.name)}</span>
                                                                 <span class="action-trigger">{action_detail_label(action, &props.player)}</span>
                                                             </div>
-                                                        }
-                                                    })}
-                                                }
+                                                            <div class="action-reorder-controls">
+                                                                <button class="btn btn-secondary action-move-btn" onclick={on_move_up} disabled={idx == 0}>{"Up"}</button>
+                                                                <button class="btn btn-secondary action-move-btn" onclick={on_move_down} disabled={idx + 1 >= action_len}>{"Down"}</button>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                })}
                                             }
                                         }
-                                    </div>
-                                </>
-                            }
-                        } else {
-                            html! {
-                                <>
-                                    <div class="actions-header-row">
-                                        <h2>{"Actions"}</h2>
-                                        {
-                                            if props.player.actions.is_empty() {
-                                                html! {}
-                                            } else {
-                                                html! {
-                                                    <button class="configure-actions-btn" onclick={on_open_config} title="Configure Actions">
-                                                        {"⚙"}
-                                                    </button>
-                                                }
-                                            }
-                                        }
-                                    </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    } else {
+                        html! {
+                            <>
+                                <div class="actions-section">
+                                    <h2>{"Actions"}</h2>
                                     <p class="actions-description">
                                         {"Your character will automatically perform these actions in combat."}
                                     </p>
@@ -208,47 +218,58 @@ pub fn character_sheet_screen(props: &CharacterSheetProps) -> Html {
                                             }
                                         }
                                     </div>
-                                </>
-                            }
+                                    {
+                                        if props.player.actions.is_empty() {
+                                            html! {}
+                                        } else {
+                                            html! {
+                                                <button class="btn btn-secondary configure-actions-cta" onclick={on_open_config}>
+                                                    {"Configure"}
+                                                </button>
+                                            }
+                                        }
+                                    }
+                                </div>
+
+                                <div class="stats-section">
+                                    <h2>{"Stats"}</h2>
+                                    <div class="stat-row">
+                                        <span class="stat-label">{"Action Speed"}</span>
+                                        <span class="stat-value">{format!("{:.1}s", props.player.action_speed_ms as f32 / 1000.0)}</span>
+                                    </div>
+                                    <div class="stat-row">
+                                        <span class="stat-label">{"HP"}</span>
+                                        <span class="stat-value">{format!("{}/{}", props.player.health, props.player.max_health)}</span>
+                                    </div>
+                                </div>
+
+                                <div class="fruits-section">
+                                    <h2>{"Eaten Fruits"}</h2>
+                                    <div class="fruits-list">
+                                        {
+                                            if props.player.eaten_fruits.is_empty() {
+                                                html! { <span class="no-fruits">{"None"}</span> }
+                                            } else {
+                                                html! {
+                                                    { for props.player.eaten_fruits.iter().map(|f| {
+                                                        let fruit = quest_core::fruit::Fruit::get_by_id(f);
+                                                        let name = fruit.as_ref().map(|fr| fr.name.clone()).unwrap_or_else(|| f.clone());
+                                                        html! {
+                                                            <div class="fruit-badge">
+                                                                <span class="fruit-badge-icon">{"🍎"}</span>
+                                                                <span class="fruit-badge-name">{name}</span>
+                                                            </div>
+                                                        }
+                                                    })}
+                                                }
+                                            }
+                                        }
+                                    </div>
+                                </div>
+                            </>
                         }
                     }
-                </div>
-
-                <div class="stats-section">
-                    <h2>{"Stats"}</h2>
-                    <div class="stat-row">
-                        <span class="stat-label">{"Action Speed"}</span>
-                        <span class="stat-value">{format!("{:.1}s", props.player.action_speed_ms as f32 / 1000.0)}</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">{"HP"}</span>
-                        <span class="stat-value">{format!("{}/{}", props.player.health, props.player.max_health)}</span>
-                    </div>
-                </div>
-
-                <div class="fruits-section">
-                    <h2>{"Eaten Fruits"}</h2>
-                    <div class="fruits-list">
-                        {
-                            if props.player.eaten_fruits.is_empty() {
-                                html! { <span class="no-fruits">{"None"}</span> }
-                            } else {
-                                html! {
-                                    { for props.player.eaten_fruits.iter().map(|f| {
-                                        let fruit = quest_core::fruit::Fruit::get_by_id(f);
-                                        let name = fruit.as_ref().map(|fr| fr.name.clone()).unwrap_or_else(|| f.clone());
-                                        html! {
-                                            <div class="fruit-badge">
-                                                <span class="fruit-badge-icon">{"🍎"}</span>
-                                                <span class="fruit-badge-name">{name}</span>
-                                            </div>
-                                        }
-                                    })}
-                                }
-                            }
-                        }
-                    </div>
-                </div>
+                }
             </div>
 
             <div class="character-sheet-footer">

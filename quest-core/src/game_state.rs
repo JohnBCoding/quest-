@@ -375,9 +375,14 @@ mod tests {
         let (mut state, _) = GameState::new_game();
         state.current_mob = Mob::get_by_id("rat_lord");
         state.player.health = 10;
+        let expected_damage = state
+            .current_mob
+            .as_ref()
+            .map(|mob| mob.base_damage)
+            .unwrap_or(0);
         let damage = state.execute_mob_attack();
-        assert_eq!(damage, Some(1));
-        assert_eq!(state.player.health, 9);
+        assert_eq!(damage, Some(expected_damage));
+        assert_eq!(state.player.health, 10u32.saturating_sub(expected_damage));
     }
 
     #[test]

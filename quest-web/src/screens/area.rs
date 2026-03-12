@@ -294,6 +294,11 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         ((props.player.experience as f64 / props.player.max_experience as f64) * 100.0)
             .clamp(0.0, 100.0)
     };
+    let has_health_potion_action = props
+        .player
+        .actions
+        .iter()
+        .any(|action| action.id == "health_potion");
 
     html! {
         <div class="screen area-screen">
@@ -380,6 +385,20 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                             label={Some("HP".to_string())}
                         />
                     </div>
+                    {
+                        if has_health_potion_action {
+                            html! {
+                                <div class="player-potion-hud">
+                                    <span class="potion-hud-icon">{"🧪"}</span>
+                                    <span class="potion-hud-count">
+                                        {format!("{}/{}", props.player.health_potion_uses, props.player.health_potion_capacity)}
+                                    </span>
+                                </div>
+                            }
+                        } else {
+                            html! {}
+                        }
+                    }
                     {
                         if props.has_auto_combat {
                             let flash_class = if *action_flash { "action-speed-bar-flash" } else { "" };
