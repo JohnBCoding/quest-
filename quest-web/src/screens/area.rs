@@ -26,10 +26,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     let is_portal_spawning = use_state(|| false);
     let action_progress = use_state(|| 0.0f64);
     let action_progress_ref = use_mut_ref(|| 0.0f64);
-    let action_flash = use_state(|| false);
     let mob_action_progress = use_state(|| 0.0f64);
     let mob_action_progress_ref = use_mut_ref(|| 0.0f64);
-    let mob_action_flash = use_state(|| false);
     let player_hit = use_state(|| false);
 
     // Boss spawn animation
@@ -77,7 +75,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     {
         let progress_state = action_progress.clone();
         let progress_ref = action_progress_ref.clone();
-        let flash = action_flash.clone();
         let has_auto = props.has_auto_combat;
         let has_mob = props.current_mob.as_ref().map_or(false, |m| !m.is_dead());
         let action_speed = props.player.action_speed_ms;
@@ -94,7 +91,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     let increment = (tick_ms as f64 / *speed as f64) * 100.0;
                     let ref_handle = progress_ref.clone();
                     let state_handle = progress_state.clone();
-                    let flash_handle = flash.clone();
                     let attack_cb = on_attack_cb.clone();
                     let attacking_setter = is_attacking_setter.clone();
 
@@ -104,8 +100,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                         let mut val = ref_handle.borrow_mut();
                         *val += increment;
                         if *val >= 100.0 {
-                            flash_handle.set(true);
-                            
                             // Trigger attack animation
                             attacking_setter.set(true);
                             let anim_reset = attacking_setter.clone();
@@ -117,11 +111,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                             attack_cb.emit(());
                             *val = 0.0;
                             state_handle.set(0.0);
-                            let flash_reset = flash_handle.clone();
-                            gloo_timers::callback::Timeout::new(300, move || {
-                                flash_reset.set(false);
-                            })
-                            .forget();
                         } else {
                             state_handle.set(*val);
                         }
@@ -145,7 +134,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         let player_hit_setter = player_hit.clone();
         let mob_progress_state = mob_action_progress.clone();
         let mob_progress_ref = mob_action_progress_ref.clone();
-        let mob_flash = mob_action_flash.clone();
 
         use_effect_with(
             (has_mob, player_alive, mob_action_speed),
@@ -158,7 +146,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     let increment = (tick_ms as f64 / speed_ms as f64) * 100.0;
                     let ref_handle = mob_progress_ref.clone();
                     let state_handle = mob_progress_state.clone();
-                    let flash_handle = mob_flash.clone();
                     let attack_cb = on_mob_attack_cb.clone();
                     let hit_setter = player_hit_setter.clone();
 
@@ -168,7 +155,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                         let mut val = ref_handle.borrow_mut();
                         *val += increment;
                         if *val >= 100.0 {
-                            flash_handle.set(true);
                             hit_setter.set(true);
                             let reset = hit_setter.clone();
                             gloo_timers::callback::Timeout::new(400, move || {
@@ -178,11 +164,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                             attack_cb.emit(());
                             *val = 0.0;
                             state_handle.set(0.0);
-                            let flash_reset = flash_handle.clone();
-                            gloo_timers::callback::Timeout::new(300, move || {
-                                flash_reset.set(false);
-                            })
-                            .forget();
                         } else {
                             state_handle.set(*val);
                         }
@@ -247,19 +228,19 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
 
                         let boss_class = if props.is_boss { "boss-encounter" } else { "" };
                         let spawn_class = if *is_spawning { "spawning-boss" } else { "" };
-                        let mob_flash_class = if *mob_action_flash { "action-speed-bar-flash" } else { "" };
-
                         html! {
                             <div class={classes!("mob-hud", anim_class, boss_class, spawn_class)}>
                                 <h3>{ &mob.name }</h3>
-                                <HealthBar
-                                    current={mob.health}
-                                    max={mob.max_health}
-                                    label={Some("HP".to_string())}
-                                />
-                                <div class={classes!("action-speed-bar-container", mob_flash_class)}>
-                                    <div class="action-speed-bar-fill" style={format!("width: {}%;", *mob_action_progress)}></div>
-                                    <div class="action-speed-bar-text">{"Action"}</div>
+                                <div class="mob-status">
+                                    <HealthBar
+                                        current={mob.health}
+                                        max={mob.max_health}
+                                        label={Some("HP".to_string())}
+                                    />
+                                    <div class="action-speed-bar-container">
+                                        <div class="action-speed-bar-fill" style={format!("width: {}%;", *mob_action_progress)}></div>
+                                        <div class="action-speed-bar-text">{"Action"}</div>
+                                    </div>
                                 </div>
                             </div>
                         }
@@ -294,9 +275,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     />
                     {
                         if props.has_auto_combat {
-                            let flash_class = if *action_flash { "action-speed-bar-flash" } else { "" };
                             html! {
-                                <div class={classes!("action-speed-bar-container", flash_class)}>
+                                <div class="action-speed-bar-container">
                                     <div class="action-speed-bar-fill" style={format!("width: {}%;", *action_progress)}></div>
                                     <div class="action-speed-bar-text">{"Action"}</div>
                                 </div>

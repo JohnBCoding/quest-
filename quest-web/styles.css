@@ -577,6 +577,12 @@ html, body {
     transition: transform 0.1s linear, filter 0.1s linear;
 }
 
+.mob-status {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
 .mob-hud.animating-attack {
     /* Higher priority to override boss animations */
     animation: flashHit 0.4s steps(4, end) !important;
@@ -972,16 +978,6 @@ html, body {
     text-shadow: 1px 1px 0 #000;
     pointer-events: none;
     z-index: 2;
-}
-
-.action-speed-bar-flash {
-    animation: actionFlash 0.3s steps(3, end);
-}
-
-@keyframes actionFlash {
-    0% { border-color: var(--c-gold); box-shadow: 0 0 10px var(--c-gold); }
-    50% { border-color: var(--c-white); box-shadow: 0 0 20px var(--c-white); }
-    100% { border-color: var(--c-purple); box-shadow: none; }
 }
 
 /* === Town Actions === */
