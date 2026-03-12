@@ -493,6 +493,12 @@ html, body {
     text-transform: uppercase;
 }
 
+.player-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
 .player-level-block {
     display: flex;
     flex-direction: column;
@@ -526,10 +532,9 @@ html, body {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    align-self: flex-start;
     border: 2px solid var(--c-green);
     background: rgba(100, 185, 100, 0.12);
-    padding: 0.35rem 0.6rem;
+    padding: 0.2rem 0.45rem;
 }
 
 .potion-hud-icon {

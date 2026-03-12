@@ -361,7 +361,23 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
             <div class="action-bar">
                 <div class="player-hud">
                     <div class="player-header">
-                        <div class="player-name">{ &props.player.name }</div>
+                        <div class="player-name-row">
+                            <div class="player-name">{ &props.player.name }</div>
+                            {
+                                if has_health_potion_action {
+                                    html! {
+                                        <div class="player-potion-hud">
+                                            <span class="potion-hud-icon">{"🧪"}</span>
+                                            <span class="potion-hud-count">
+                                                {format!("{}/{}", props.player.health_potion_uses, props.player.health_potion_capacity)}
+                                            </span>
+                                        </div>
+                                    }
+                                } else {
+                                    html! {}
+                                }
+                            }
+                        </div>
                         <div class="player-level-block">
                             <div class={classes!("player-level", if *level_up_flash { "level-up-flash" } else { "" })}>
                                 { format!("LV {}", props.player.level) }
@@ -385,20 +401,6 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                             label={Some("HP".to_string())}
                         />
                     </div>
-                    {
-                        if has_health_potion_action {
-                            html! {
-                                <div class="player-potion-hud">
-                                    <span class="potion-hud-icon">{"🧪"}</span>
-                                    <span class="potion-hud-count">
-                                        {format!("{}/{}", props.player.health_potion_uses, props.player.health_potion_capacity)}
-                                    </span>
-                                </div>
-                            }
-                        } else {
-                            html! {}
-                        }
-                    }
                     {
                         if props.has_auto_combat {
                             let flash_class = if *action_flash { "action-speed-bar-flash" } else { "" };
