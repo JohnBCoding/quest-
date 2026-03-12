@@ -25,6 +25,14 @@ pub enum TransitionState {
     WipeIn,
 }
 
+#[derive(Clone, PartialEq)]
+pub enum PostTransitionLogic {
+    AdvanceEncounter,
+    EatFruit,
+    CloseCharacterSheet,
+    TravelToArea(String),
+}
+
 pub struct App {
     screen: Screen,
     pending_screen: Option<Screen>,
@@ -32,6 +40,7 @@ pub struct App {
     game_state: Option<GameState>,
     rng_manager: Option<RngManager>,
     from_fruit_scene: bool,
+    post_transition_logic: Option<PostTransitionLogic>,
 }
 
 pub enum AppMsg {
@@ -48,6 +57,7 @@ pub enum AppMsg {
     CloseCharacterSheet,
     OpenCharacterSheet,
     TravelToArea(String),
+    NavigateWithLogic(Screen, PostTransitionLogic),
 }
 
 impl Component for App {
@@ -62,6 +72,7 @@ impl Component for App {
             game_state: None,
             rng_manager: None,
             from_fruit_scene: false,
+            post_transition_logic: None,
         }
     }
 
@@ -79,8 +90,63 @@ impl Component for App {
 
                 true
             }
+            AppMsg::NavigateWithLogic(screen, logic) => {
+                self.pending_screen = Some(screen);
+                self.post_transition_logic = Some(logic);
+                self.transition = TransitionState::WipeOut;
+
+                let link = ctx.link().clone();
+                gloo_timers::callback::Timeout::new(400, move || {
+                    link.send_message(AppMsg::TransitionMidpoint);
+                })
+                .forget();
+
+                true
+            }
             AppMsg::TransitionMidpoint => {
-                if let Some(screen) = self.pending_screen.take() {
+                if let Some(logic) = self.post_transition_logic.take() {
+                    match logic {
+                        PostTransitionLogic::AdvanceEncounter => {
+                            if let Some(ref mut state) = self.game_state {
+                                if state.advance_encounter() {
+                                    storage::save_game(state);
+                                    if state.fruit_scene_active {
+                                        self.screen = Screen::FruitScene;
+                                    } else {
+                                        self.screen = Screen::InGame;
+                                    }
+                                }
+                            }
+                        }
+                        PostTransitionLogic::EatFruit => {
+                            if let Some(ref mut state) = self.game_state {
+                                state.complete_fruit_scene();
+                                storage::save_game(state);
+                                self.from_fruit_scene = true;
+                                self.screen = Screen::CharacterSheet;
+                            }
+                        }
+                        PostTransitionLogic::CloseCharacterSheet => {
+                            if self.from_fruit_scene {
+                                self.from_fruit_scene = false;
+                                if let Some(ref mut state) = self.game_state {
+                                    state.enter_area("the_fringe");
+                                    storage::save_game(state);
+                                }
+                            }
+                            self.screen = Screen::InGame;
+                        }
+                        PostTransitionLogic::TravelToArea(area_id) => {
+                            if let Some(ref mut state) = self.game_state {
+                                if state.enter_area(&area_id) {
+                                    storage::save_game(state);
+                                    self.screen = Screen::InGame;
+                                }
+                            }
+                        }
+                    }
+                    self.pending_screen = None;
+                } else if let Some(screen) = self.pending_screen.take() {
                     self.screen = screen;
                 }
                 self.transition = TransitionState::WipeIn;
@@ -142,17 +208,7 @@ impl Component for App {
                 false
             }
             AppMsg::AdvanceEncounter => {
-                if let Some(ref mut state) = self.game_state {
-                    if state.advance_encounter() {
-                        storage::save_game(state);
-                        if state.fruit_scene_active {
-                            ctx.link().send_message(AppMsg::Navigate(Screen::FruitScene));
-                        } else if state.in_town {
-                            ctx.link().send_message(AppMsg::Navigate(Screen::InGame));
-                        }
-                        return true;
-                    }
-                }
+                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::AdvanceEncounter));
                 false
             }
             AppMsg::EnterPortal => {
@@ -169,23 +225,11 @@ impl Component for App {
                 state_changed
             }
             AppMsg::EatFruit => {
-                if let Some(ref mut state) = self.game_state {
-                    state.complete_fruit_scene();
-                    storage::save_game(state);
-                    self.from_fruit_scene = true;
-                    ctx.link().send_message(AppMsg::Navigate(Screen::CharacterSheet));
-                }
+                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::CharacterSheet, PostTransitionLogic::EatFruit));
                 false
             }
             AppMsg::CloseCharacterSheet => {
-                if self.from_fruit_scene {
-                    self.from_fruit_scene = false;
-                    if let Some(ref mut state) = self.game_state {
-                        state.enter_area("the_fringe");
-                        storage::save_game(state);
-                    }
-                }
-                ctx.link().send_message(AppMsg::Navigate(Screen::InGame));
+                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::CloseCharacterSheet));
                 false
             }
             AppMsg::OpenCharacterSheet => {
@@ -193,12 +237,7 @@ impl Component for App {
                 false
             }
             AppMsg::TravelToArea(area_id) => {
-                if let Some(ref mut state) = self.game_state {
-                    if state.enter_area(&area_id) {
-                        storage::save_game(state);
-                        ctx.link().send_message(AppMsg::Navigate(Screen::InGame));
-                    }
-                }
+                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::TravelToArea(area_id)));
                 false
             }
         }
