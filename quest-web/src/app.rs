@@ -3,26 +3,34 @@ use yew::prelude::*;
 use crate::screens::area::AreaScreen;
 use crate::screens::main_menu::MainMenuScreen;
 use crate::screens::town::TownScreen;
+use crate::screens::fruit_scene::FruitSceneScreen;
+use crate::screens::character_sheet::CharacterSheetScreen;
 use crate::storage;
 
 use quest_core::game_state::GameState;
 use quest_core::rng::RngManager;
 
-/// The active screen in the app.
 #[derive(Clone, PartialEq)]
 pub enum Screen {
     MainMenu,
     InGame,
+    FruitScene,
+    CharacterSheet,
 }
 
-/// Transition state for old-school screen wipe.
 #[derive(Clone, PartialEq)]
 pub enum TransitionState {
     None,
-    /// Wipe-out: covering the screen (old content fading)
     WipeOut,
-    /// Wipe-in: revealing new screen
     WipeIn,
+}
+
+#[derive(Clone, PartialEq)]
+pub enum PostTransitionLogic {
+    AdvanceEncounter,
+    EatFruit,
+    CloseCharacterSheet,
+    TravelToArea(String),
 }
 
 pub struct App {
@@ -31,6 +39,8 @@ pub struct App {
     transition: TransitionState,
     game_state: Option<GameState>,
     rng_manager: Option<RngManager>,
+    from_fruit_scene: bool,
+    post_transition_logic: Option<PostTransitionLogic>,
 }
 
 pub enum AppMsg {
@@ -43,6 +53,11 @@ pub enum AppMsg {
     AttackMob,
     AdvanceEncounter,
     EnterPortal,
+    EatFruit,
+    CloseCharacterSheet,
+    OpenCharacterSheet,
+    TravelToArea(String),
+    NavigateWithLogic(Screen, PostTransitionLogic),
 }
 
 impl Component for App {
@@ -56,6 +71,8 @@ impl Component for App {
             transition: TransitionState::None,
             game_state: None,
             rng_manager: None,
+            from_fruit_scene: false,
+            post_transition_logic: None,
         }
     }
 
@@ -65,7 +82,19 @@ impl Component for App {
                 self.pending_screen = Some(screen);
                 self.transition = TransitionState::WipeOut;
 
-                // After wipe-out animation, trigger midpoint
+                let link = ctx.link().clone();
+                gloo_timers::callback::Timeout::new(400, move || {
+                    link.send_message(AppMsg::TransitionMidpoint);
+                })
+                .forget();
+
+                true
+            }
+            AppMsg::NavigateWithLogic(screen, logic) => {
+                self.pending_screen = Some(screen);
+                self.post_transition_logic = Some(logic);
+                self.transition = TransitionState::WipeOut;
+
                 let link = ctx.link().clone();
                 gloo_timers::callback::Timeout::new(400, move || {
                     link.send_message(AppMsg::TransitionMidpoint);
@@ -75,13 +104,53 @@ impl Component for App {
                 true
             }
             AppMsg::TransitionMidpoint => {
-                // Swap the screen while fully covered
-                if let Some(screen) = self.pending_screen.take() {
+                if let Some(logic) = self.post_transition_logic.take() {
+                    match logic {
+                        PostTransitionLogic::AdvanceEncounter => {
+                            if let Some(ref mut state) = self.game_state {
+                                if state.advance_encounter() {
+                                    storage::save_game(state);
+                                    if state.fruit_scene_active {
+                                        self.screen = Screen::FruitScene;
+                                    } else {
+                                        self.screen = Screen::InGame;
+                                    }
+                                }
+                            }
+                        }
+                        PostTransitionLogic::EatFruit => {
+                            if let Some(ref mut state) = self.game_state {
+                                state.complete_fruit_scene();
+                                storage::save_game(state);
+                                self.from_fruit_scene = true;
+                                self.screen = Screen::CharacterSheet;
+                            }
+                        }
+                        PostTransitionLogic::CloseCharacterSheet => {
+                            if self.from_fruit_scene {
+                                self.from_fruit_scene = false;
+                                if let Some(ref mut state) = self.game_state {
+                                    state.enter_area("the_fringe");
+                                    storage::save_game(state);
+                                }
+                            }
+                            self.screen = Screen::InGame;
+                        }
+                        PostTransitionLogic::TravelToArea(area_id) => {
+                            if let Some(ref mut state) = self.game_state {
+                                if state.enter_area(&area_id) {
+                                    storage::save_game(state);
+                                    self.screen = Screen::InGame;
+                                }
+                            }
+                        }
+                    }
+                    self.pending_screen = None;
+                } else if let Some(screen) = self.pending_screen.take() {
                     self.screen = screen;
                 }
                 self.transition = TransitionState::WipeIn;
 
-                // After wipe-in, clear transition
                 let link = ctx.link().clone();
                 gloo_timers::callback::Timeout::new(400, move || {
                     link.send_message(AppMsg::TransitionEnd);
@@ -112,7 +181,6 @@ impl Component for App {
                 false
             }
             AppMsg::ExitGame => {
-                // Save before exiting
                 if let Some(ref state) = self.game_state {
                     storage::save_game(state);
                 }
@@ -126,27 +194,49 @@ impl Component for App {
                     if state.execute_attack() {
                         let is_dead = state.current_mob.as_ref().map_or(false, |m| m.is_dead());
                         storage::save_game(state);
-                        
+
                         if is_dead {
                             let link = ctx.link().clone();
                             gloo_timers::callback::Timeout::new(2000, move || {
                                 link.send_message(AppMsg::AdvanceEncounter);
                             }).forget();
                         }
-                        
+
                         return true;
                     }
                 }
                 false
             }
             AppMsg::AdvanceEncounter => {
+                let mut needs_wipe = false;
+                
                 if let Some(ref mut state) = self.game_state {
-                    if state.advance_encounter() {
-                        storage::save_game(state);
-                        return true;
+                    // Check if this move will result in a screen change
+                    let is_beach_boss = state.is_boss_encounter && state.current_area.id == "the_beach";
+                    let is_other_boss = state.is_boss_encounter && state.current_area.id != "the_beach";
+                    let _is_last_encounter = !state.is_boss_encounter && state.encounters_cleared + 1 >= state.current_area.base_encounter_amount;
+
+                    // If boss death (beach -> fruit, other -> town) or area end (portal state), those are big shifts
+                    // Actually, even portal state might be better without a wipe if we want the shimmer to show.
+                    // The user said "boss portal ... already have animations".
+                    
+                    if is_beach_boss || is_other_boss {
+                        needs_wipe = true;
                     }
                 }
-                false
+
+                if needs_wipe {
+                    ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::AdvanceEncounter));
+                    false
+                } else {
+                    // Local change (regular mob or portal shimmer), handle instantly
+                    if let Some(ref mut state) = self.game_state {
+                        if state.advance_encounter() {
+                            storage::save_game(state);
+                        }
+                    }
+                    true
+                }
             }
             AppMsg::EnterPortal => {
                 let mut state_changed = false;
@@ -160,6 +250,22 @@ impl Component for App {
                     }
                 }
                 state_changed
+            }
+            AppMsg::EatFruit => {
+                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::CharacterSheet, PostTransitionLogic::EatFruit));
+                false
+            }
+            AppMsg::CloseCharacterSheet => {
+                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::CloseCharacterSheet));
+                false
+            }
+            AppMsg::OpenCharacterSheet => {
+                ctx.link().send_message(AppMsg::Navigate(Screen::CharacterSheet));
+                false
+            }
+            AppMsg::TravelToArea(area_id) => {
+                ctx.link().send_message(AppMsg::NavigateWithLogic(Screen::InGame, PostTransitionLogic::TravelToArea(area_id)));
+                false
             }
         }
     }
@@ -188,9 +294,14 @@ impl Component for App {
                 let on_enter_portal = ctx.link().callback(|_| AppMsg::EnterPortal);
                 if let Some(ref state) = self.game_state {
                     if state.in_town {
+                        let on_open_cs = ctx.link().callback(|_| AppMsg::OpenCharacterSheet);
+                        let on_travel = ctx.link().callback(|_| AppMsg::TravelToArea("the_fringe".to_string()));
                         html! {
                             <TownScreen
+                                has_auto_combat={state.player.has_auto_combat()}
                                 on_exit={on_exit}
+                                on_open_character_sheet={on_open_cs}
+                                on_travel_fringe={on_travel}
                             />
                         }
                     } else {
@@ -201,11 +312,39 @@ impl Component for App {
                                 current_mob={state.current_mob.clone()}
                                 encounters_cleared={state.encounters_cleared}
                                 is_boss={state.is_boss_encounter}
+                                has_auto_combat={state.player.has_auto_combat()}
                                 on_exit={on_exit}
                                 on_attack={on_attack}
                                 on_enter_portal={on_enter_portal}
                             />
                         }
+                    }
+                } else {
+                    html! { <div class="screen">{ "Error: No game state" }</div> }
+                }
+            }
+            Screen::FruitScene => {
+                if let Some(ref state) = self.game_state {
+                    let fruit_id = state.pending_fruit_id.clone().unwrap_or_default();
+                    let on_eat = ctx.link().callback(|_| AppMsg::EatFruit);
+                    html! {
+                        <FruitSceneScreen
+                            fruit_id={fruit_id}
+                            on_eat_fruit={on_eat}
+                        />
+                    }
+                } else {
+                    html! { <div class="screen">{ "Error: No game state" }</div> }
+                }
+            }
+            Screen::CharacterSheet => {
+                if let Some(ref state) = self.game_state {
+                    let on_close = ctx.link().callback(|_| AppMsg::CloseCharacterSheet);
+                    html! {
+                        <CharacterSheetScreen
+                            player={state.player.clone()}
+                            on_close={on_close}
+                        />
                     }
                 } else {
                     html! { <div class="screen">{ "Error: No game state" }</div> }
@@ -218,7 +357,6 @@ impl Component for App {
                 <div class={classes!("screen-container", transition_class)}>
                     { content }
                 </div>
-                // Transition overlay
                 <div class={classes!("transition-overlay", transition_class)} />
             </div>
         }

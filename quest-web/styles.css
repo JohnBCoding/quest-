@@ -61,6 +61,17 @@ html, body {
     z-index: 1;
 }
 
+/* Freeze all child animations during screen transitions */
+.screen-container.transition-wipe-out,
+.screen-container.transition-wipe-in {
+    pointer-events: none;
+}
+
+.screen-container.transition-wipe-out * {
+    animation-play-state: paused !important;
+    transition: none !important;
+}
+
 /* --- Transition Overlay --- */
 .transition-overlay {
     position: fixed;
@@ -659,4 +670,343 @@ html, body {
     text-shadow: 1px 1px 0 #000;
     pointer-events: none;
     z-index: 2;
+}
+
+/* === Fruit Scene === */
+.fruit-scene {
+    justify-content: center;
+    align-items: center;
+    background: var(--c-bg);
+}
+
+.fruit-scene-backdrop {
+    width: 100%;
+    max-width: 500px;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.fruit-scene-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+    text-align: center;
+}
+
+.fruit-icon {
+    font-size: 5rem;
+    line-height: 1;
+}
+
+.fruit-glow {
+    animation: fruitGlow 1.5s ease-in-out infinite;
+}
+
+@keyframes fruitGlow {
+    0%, 100% { text-shadow: 0 0 10px rgba(230, 200, 110, 0.3); filter: brightness(1); }
+    50% { text-shadow: 0 0 30px var(--c-gold), 0 0 60px rgba(230, 200, 110, 0.5); filter: brightness(1.2); }
+}
+
+.fruit-drop-animation {
+    animation: fruitDrop 1.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes fruitDrop {
+    0% { transform: translateY(-200px) scale(0.3); opacity: 0; }
+    60% { transform: translateY(10px) scale(1.1); opacity: 1; }
+    80% { transform: translateY(-5px) scale(0.95); }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.fruit-landed {
+    animation: fruitGlow 1.5s ease-in-out infinite, fruitBob 2s ease-in-out infinite;
+}
+
+@keyframes fruitBob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+.fruit-ready {
+    animation: fruitGlow 0.8s ease-in-out infinite;
+}
+
+.fruit-consumed {
+    animation: fruitConsume 1s ease-out forwards;
+}
+
+@keyframes fruitConsume {
+    0% { transform: scale(1); opacity: 1; filter: brightness(2); }
+    50% { transform: scale(1.3); opacity: 0.8; filter: brightness(3); }
+    100% { transform: scale(0.6); opacity: 0.5; filter: brightness(0.8) grayscale(0.5); }
+}
+
+.scene-text {
+    font-size: 0.9rem;
+    color: var(--c-white);
+    line-height: 2;
+    opacity: 0.9;
+}
+
+.scene-text-fade {
+    animation: textFadeIn 1.5s ease-out forwards;
+}
+
+@keyframes textFadeIn {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 0.9; transform: translateY(0); }
+}
+
+.fruit-name {
+    color: var(--c-gold);
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    text-shadow: 2px 2px 0 var(--c-orange);
+    animation: textFadeIn 0.8s ease-out forwards;
+}
+
+.fruit-desc {
+    font-size: 0.8rem;
+    color: var(--c-white);
+    line-height: 2;
+    opacity: 0.8;
+    max-width: 400px;
+    animation: textFadeIn 1s ease-out 0.3s both;
+}
+
+.btn-fruit-eat {
+    font-family: var(--font-main);
+    font-size: 1.1rem;
+    padding: 1.2rem 2rem;
+    border: 3px solid var(--c-green);
+    color: var(--c-green);
+    background: transparent;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    animation: textFadeIn 0.8s ease-out 0.6s both, eatPulse 2s ease-in-out 1.4s infinite;
+}
+
+.btn-fruit-eat:hover {
+    background: var(--c-green);
+    color: var(--c-bg);
+    box-shadow: 0 0 20px rgba(100, 185, 100, 0.4);
+}
+
+@keyframes eatPulse {
+    0%, 100% { box-shadow: 0 0 5px rgba(100, 185, 100, 0.2); }
+    50% { box-shadow: 0 0 20px rgba(100, 185, 100, 0.5); }
+}
+
+/* === Character Sheet === */
+.character-sheet {
+    padding: 0;
+}
+
+.character-sheet-header {
+    padding: 1.5rem 1.2rem;
+    border-bottom: 3px solid var(--c-purple);
+    background: rgba(85, 65, 95, 0.2);
+}
+
+.character-sheet-header h1 {
+    font-size: 1.4rem;
+    color: var(--c-gold);
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+}
+
+.player-stat {
+    font-size: 0.8rem;
+    color: var(--c-blue);
+}
+
+.character-sheet-body {
+    flex: 1;
+    padding: 1.5rem 1.2rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.actions-section h2,
+.stats-section h2,
+.fruits-section h2 {
+    font-size: 1rem;
+    color: var(--c-orange);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.8rem;
+    border-bottom: 2px solid var(--c-purple);
+    padding-bottom: 0.5rem;
+}
+
+.actions-description {
+    font-size: 0.7rem;
+    color: var(--c-gray);
+    line-height: 1.8;
+    margin-bottom: 1rem;
+}
+
+.actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.action-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.8rem 1rem;
+    border: 2px solid var(--c-purple);
+    background: rgba(85, 65, 95, 0.2);
+}
+
+.action-row.empty {
+    border-style: dashed;
+    justify-content: center;
+}
+
+.action-name {
+    font-size: 0.85rem;
+    color: var(--c-white);
+}
+
+.action-trigger {
+    font-size: 0.7rem;
+    color: var(--c-green);
+    text-transform: uppercase;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(85, 65, 95, 0.3);
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: var(--c-gray);
+}
+
+.stat-value {
+    font-size: 0.8rem;
+    color: var(--c-white);
+}
+
+.fruits-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+}
+
+.no-fruits {
+    font-size: 0.8rem;
+    color: var(--c-gray);
+}
+
+.fruit-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.8rem;
+    border: 2px solid var(--c-gold);
+    background: rgba(230, 200, 110, 0.1);
+}
+
+.fruit-badge-icon {
+    font-size: 1.2rem;
+}
+
+.fruit-badge-name {
+    font-size: 0.7rem;
+    color: var(--c-gold);
+}
+
+.character-sheet-footer {
+    padding: 1.2rem;
+    border-top: 3px solid var(--c-purple);
+    display: flex;
+    justify-content: center;
+}
+
+.character-sheet-footer .btn {
+    max-width: 280px;
+}
+
+/* === Action Speed Bar === */
+.action-speed-bar-container {
+    width: 100%;
+    height: 12px;
+    background: var(--c-bg);
+    border: 2px solid var(--c-purple);
+    position: relative;
+    margin-top: 0.3rem;
+}
+
+.action-speed-bar-fill {
+    height: 100%;
+    background: var(--c-blue);
+    transition: width 0.05s linear;
+}
+
+.action-speed-bar-text {
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    transform: translateY(-50%);
+    font-size: 0.55rem;
+    color: var(--c-white);
+    text-shadow: 1px 1px 0 #000;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.action-speed-bar-flash {
+    animation: actionFlash 0.3s steps(3, end);
+}
+
+@keyframes actionFlash {
+    0% { border-color: var(--c-gold); box-shadow: 0 0 10px var(--c-gold); }
+    50% { border-color: var(--c-white); box-shadow: 0 0 20px var(--c-white); }
+    100% { border-color: var(--c-purple); box-shadow: none; }
+}
+
+/* === Town Actions === */
+.town-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 2rem;
+    max-width: 320px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.town-btn {
+    width: 100%;
+}
+
+/* === Encounter Progress === */
+.encounter-progress {
+    font-size: 0.75rem;
+    color: var(--c-gray);
+}
+
+/* === Disabled Button === */
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+    background: transparent;
+    box-shadow: none;
 }
