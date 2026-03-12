@@ -247,6 +247,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
 
                         let boss_class = if props.is_boss { "boss-encounter" } else { "" };
                         let spawn_class = if *is_spawning { "spawning-boss" } else { "" };
+                        let mob_flash_class = if *mob_action_flash { "action-speed-bar-flash" } else { "" };
 
                         html! {
                             <div class={classes!("mob-hud", anim_class, boss_class, spawn_class)}>
@@ -256,19 +257,10 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                                     max={mob.max_health}
                                     label={Some("HP".to_string())}
                                 />
-                                {
-                                    if !mob.is_dead() {
-                                        let flash_class = if *mob_action_flash { "action-speed-bar-flash" } else { "" };
-                                        html! {
-                                            <div class={classes!("action-speed-bar-container", flash_class)}>
-                                                <div class="action-speed-bar-fill" style={format!("width: {}%;", *mob_action_progress)}></div>
-                                                <div class="action-speed-bar-text">{"Action"}</div>
-                                            </div>
-                                        }
-                                    } else {
-                                        html! {}
-                                    }
-                                }
+                                <div class={classes!("action-speed-bar-container", mob_flash_class)}>
+                                    <div class="action-speed-bar-fill" style={format!("width: {}%;", *mob_action_progress)}></div>
+                                    <div class="action-speed-bar-text">{"Action"}</div>
+                                </div>
                             </div>
                         }
                     } else if props.encounters_cleared >= props.area.base_encounter_amount {
