@@ -181,7 +181,7 @@ impl Component for App {
                 if self.from_fruit_scene {
                     self.from_fruit_scene = false;
                     if let Some(ref mut state) = self.game_state {
-                        state.in_town = true;
+                        state.enter_area("the_fringe");
                         storage::save_game(state);
                     }
                 }
