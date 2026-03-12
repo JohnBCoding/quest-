@@ -77,6 +77,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         let has_mob = props.current_mob.as_ref().map_or(false, |m| !m.is_dead());
         let action_speed = props.player.action_speed_ms;
         let on_attack_cb = props.on_attack.clone();
+        let is_attacking_setter = is_attacking.clone();
 
         use_effect_with(
             (has_auto, has_mob, action_speed),
@@ -90,6 +91,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     let state_handle = progress_state.clone();
                     let flash_handle = flash.clone();
                     let attack_cb = on_attack_cb.clone();
+                    let attacking_setter = is_attacking_setter.clone();
 
                     *ref_handle.borrow_mut() = 0.0;
 
@@ -98,6 +100,15 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                         *val += increment;
                         if *val >= 100.0 {
                             flash_handle.set(true);
+                            
+                            // Trigger attack animation
+                            attacking_setter.set(true);
+                            let anim_reset = attacking_setter.clone();
+                            gloo_timers::callback::Timeout::new(400, move || {
+                                anim_reset.set(false);
+                            })
+                            .forget();
+                            
                             attack_cb.emit(());
                             *val = 0.0;
                             state_handle.set(0.0);
