@@ -1,6 +1,6 @@
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
 
 /// Represents an enemy or NPC encountered in an area.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -9,6 +9,8 @@ pub struct Mob {
     pub name: String,
     pub health: u32,
     pub max_health: u32,
+    #[serde(default)]
+    pub base_xp: u64,
     #[serde(default)]
     pub base_damage: u32,
     #[serde(default = "default_action_speed")]
@@ -27,20 +29,26 @@ pub static MOB_REGISTRY: Lazy<HashMap<String, Mob>> = Lazy::new(|| {
         id: String,
         name: String,
         health: u32,
+        #[serde(default)]
+        base_xp: u64,
         base_damage: u32,
         action_speed_ms: u32,
     }
     let parsed: Vec<MobData> = serde_json::from_str(json_data).expect("Failed to parse mobs.json");
     let mut registry = HashMap::new();
     for data in parsed {
-        registry.insert(data.id.clone(), Mob {
-            id: data.id,
-            name: data.name,
-            health: data.health,
-            max_health: data.health, // Initialize max_health to base health
-            base_damage: data.base_damage,
-            action_speed_ms: data.action_speed_ms,
-        });
+        registry.insert(
+            data.id.clone(),
+            Mob {
+                id: data.id,
+                name: data.name,
+                health: data.health,
+                max_health: data.health, // Initialize max_health to base health
+                base_xp: data.base_xp,
+                base_damage: data.base_damage,
+                action_speed_ms: data.action_speed_ms,
+            },
+        );
     }
     registry
 });
@@ -52,12 +60,20 @@ impl Mob {
     }
 
     /// Creates a new Mob with the given name and health.
-    pub fn new(id: &str, name: &str, health: u32, base_damage: u32, action_speed_ms: u32) -> Self {
+    pub fn new(
+        id: &str,
+        name: &str,
+        health: u32,
+        base_xp: u64,
+        base_damage: u32,
+        action_speed_ms: u32,
+    ) -> Self {
         Self {
             id: id.to_string(),
             name: name.to_string(),
             health,
             max_health: health,
+            base_xp,
             base_damage,
             action_speed_ms,
         }
@@ -88,17 +104,19 @@ mod tests {
         let rat = Mob::get_by_id("rat").expect("Rat should be loaded from registry");
         assert_eq!(rat.name, "Rat");
         assert_eq!(rat.max_health, 2);
+        assert!(rat.base_xp > 0);
         assert_eq!(rat.base_damage, 0);
         assert_eq!(rat.action_speed_ms, 1000);
     }
 
     #[test]
     fn mob_creation() {
-        let mob = Mob::new("rat", "Rat", 2, 0, 1000);
+        let mob = Mob::new("rat", "Rat", 2, 10, 0, 1000);
         assert_eq!(mob.id, "rat");
         assert_eq!(mob.name, "Rat");
         assert_eq!(mob.health, 2);
         assert_eq!(mob.max_health, 2);
+        assert_eq!(mob.base_xp, 10);
         assert_eq!(mob.base_damage, 0);
         assert_eq!(mob.action_speed_ms, 1000);
         assert!(!mob.is_dead());
@@ -106,11 +124,11 @@ mod tests {
 
     #[test]
     fn take_damage() {
-        let mut mob = Mob::new("rat", "Rat", 2, 0, 1000);
+        let mut mob = Mob::new("rat", "Rat", 2, 10, 0, 1000);
         mob.take_damage(1);
         assert_eq!(mob.health, 1);
         assert!(!mob.is_dead());
-        
+
         mob.take_damage(2); // Overkill
         assert_eq!(mob.health, 0);
         assert!(mob.is_dead());

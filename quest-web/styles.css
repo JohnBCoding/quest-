@@ -476,10 +476,46 @@ html, body {
     animation: flashHit 0.4s steps(4, end);
 }
 
+.player-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
 .player-hud .player-name {
     font-size: 0.8rem;
     color: var(--c-blue);
     text-transform: uppercase;
+}
+
+.player-level-block {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+}
+
+.player-level {
+    display: inline-block;
+    font-size: 0.75rem;
+    color: var(--c-gold);
+    text-align: right;
+    min-width: 5.2rem;
+}
+
+.player-exp-bar {
+    width: 5.2rem;
+    height: 6px;
+    background: var(--c-bg);
+    border: 1px solid var(--c-purple);
+    overflow: hidden;
+}
+
+.player-exp-bar-fill {
+    height: 100%;
+    background: var(--c-gold);
+    transition: width 0.2s linear;
 }
 
 .action-buttons {
@@ -997,6 +1033,26 @@ html, body {
 @keyframes actionFlash {
     0% { border-color: var(--c-gold); box-shadow: 0 0 10px var(--c-gold); }
     50% { border-color: var(--c-white); box-shadow: 0 0 20px var(--c-white); }
+    100% { border-color: var(--c-purple); box-shadow: none; }
+}
+
+.player-level.level-up-flash {
+    animation: levelUpTextPulse 0.9s steps(5, end);
+}
+
+.player-exp-bar.level-up-flash {
+    animation: levelUpBarPulse 0.9s steps(5, end);
+}
+
+@keyframes levelUpTextPulse {
+    0% { color: var(--c-gold); text-shadow: none; transform: scale(1); }
+    40% { color: var(--c-white); text-shadow: 0 0 8px var(--c-gold); transform: scale(1.06); }
+    100% { color: var(--c-gold); text-shadow: none; transform: scale(1); }
+}
+
+@keyframes levelUpBarPulse {
+    0% { border-color: var(--c-purple); box-shadow: none; }
+    40% { border-color: var(--c-gold); box-shadow: 0 0 10px var(--c-gold); }
     100% { border-color: var(--c-purple); box-shadow: none; }
 }
 

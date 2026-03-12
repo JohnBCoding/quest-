@@ -9,6 +9,8 @@ pub struct Player {
     pub health: u32,
     pub max_health: u32,
     pub experience: u64,
+    #[serde(default = "default_max_experience")]
+    pub max_experience: u64,
     #[serde(default)]
     pub eaten_fruits: Vec<String>,
     #[serde(default)]
@@ -21,6 +23,10 @@ fn default_action_speed() -> u32 {
     1000
 }
 
+fn default_max_experience() -> u64 {
+    250
+}
+
 impl Player {
     pub fn new(name: &str) -> Self {
         Self {
@@ -29,6 +35,7 @@ impl Player {
             health: 50,
             max_health: 50,
             experience: 0,
+            max_experience: default_max_experience(),
             eaten_fruits: Vec::new(),
             actions: Vec::new(),
             action_speed_ms: 1000,
@@ -51,12 +58,34 @@ impl Player {
         self.health = self.health.saturating_sub(amount);
     }
 
+    pub fn gain_experience(&mut self, amount: u64) -> bool {
+        if amount == 0 {
+            return false;
+        }
+
+        self.experience = self.experience.saturating_add(amount);
+        if self.experience >= self.max_experience {
+            self.level_up();
+            return true;
+        }
+
+        false
+    }
+
     pub fn eat_fruit(&mut self, fruit_id: &str) {
         if self.has_eaten_fruit(fruit_id) {
             return;
         }
         self.eaten_fruits.push(fruit_id.to_string());
         self.apply_fruit_effect(fruit_id);
+    }
+
+    fn level_up(&mut self) {
+        self.level = self.level.saturating_add(1);
+        self.experience = 0;
+
+        let growth = ((self.max_experience as f64 * self.level as f64) * 0.3).round() as u64;
+        self.max_experience = self.max_experience.saturating_add(growth.max(1));
     }
 
     fn apply_fruit_effect(&mut self, fruit_id: &str) {
@@ -95,6 +124,7 @@ mod tests {
         assert_eq!(player.health, 50);
         assert_eq!(player.max_health, 50);
         assert_eq!(player.experience, 0);
+        assert_eq!(player.max_experience, 250);
         assert!(player.eaten_fruits.is_empty());
         assert!(player.actions.is_empty());
         assert_eq!(player.action_speed_ms, 1000);
@@ -127,6 +157,26 @@ mod tests {
         assert_eq!(player.health, 45);
         player.take_damage(100);
         assert_eq!(player.health, 0);
+    }
+
+    #[test]
+    fn gain_experience_increments_without_level_up() {
+        let mut player = Player::default();
+        let did_level = player.gain_experience(10);
+        assert!(!did_level);
+        assert_eq!(player.level, 1);
+        assert_eq!(player.experience, 10);
+        assert_eq!(player.max_experience, 250);
+    }
+
+    #[test]
+    fn gain_experience_levels_up_at_threshold_and_resets_exp() {
+        let mut player = Player::default();
+        let did_level = player.gain_experience(250);
+        assert!(did_level);
+        assert_eq!(player.level, 2);
+        assert_eq!(player.experience, 0);
+        assert_eq!(player.max_experience, 400);
     }
 
     #[test]

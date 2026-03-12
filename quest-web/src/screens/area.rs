@@ -1,9 +1,9 @@
 use yew::prelude::*;
 
+use crate::components::health_bar::HealthBar;
 use quest_core::area::Area;
 use quest_core::mob::Mob;
 use quest_core::player::Player;
-use crate::components::health_bar::HealthBar;
 
 #[derive(Properties, PartialEq)]
 pub struct AreaScreenProps {
@@ -31,46 +31,43 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     let mob_action_progress_ref = use_mut_ref(|| 0.0f64);
     let mob_action_flash = use_state(|| false);
     let player_hit = use_state(|| false);
+    let level_up_flash = use_state(|| false);
+    let prev_player_level = use_mut_ref(|| props.player.level);
 
     // Boss spawn animation
     {
         let is_spawning_setter = is_spawning.clone();
         let is_boss = props.is_boss;
         let mob_id = props.current_mob.as_ref().map(|m| m.id.clone());
-        use_effect_with(
-            (is_boss, mob_id),
-            move |_| {
-                if is_boss {
-                    is_spawning_setter.set(true);
-                    let setter = is_spawning_setter.clone();
-                    gloo_timers::callback::Timeout::new(1200, move || {
-                        setter.set(false);
-                    })
-                    .forget();
-                }
-                || ()
-            },
-        );
+        use_effect_with((is_boss, mob_id), move |_| {
+            if is_boss {
+                is_spawning_setter.set(true);
+                let setter = is_spawning_setter.clone();
+                gloo_timers::callback::Timeout::new(1200, move || {
+                    setter.set(false);
+                })
+                .forget();
+            }
+            || ()
+        });
     }
 
     // Portal spawn animation
     {
         let is_portal_spawning_setter = is_portal_spawning.clone();
-        let can_show_portal = props.current_mob.is_none() && props.encounters_cleared >= props.area.base_encounter_amount;
-        use_effect_with(
-            can_show_portal,
-            move |&can_show| {
-                if can_show {
-                    is_portal_spawning_setter.set(true);
-                    let setter = is_portal_spawning_setter.clone();
-                    gloo_timers::callback::Timeout::new(1000, move || {
-                        setter.set(false);
-                    })
-                    .forget();
-                }
-                || ()
+        let can_show_portal = props.current_mob.is_none()
+            && props.encounters_cleared >= props.area.base_encounter_amount;
+        use_effect_with(can_show_portal, move |&can_show| {
+            if can_show {
+                is_portal_spawning_setter.set(true);
+                let setter = is_portal_spawning_setter.clone();
+                gloo_timers::callback::Timeout::new(1000, move || {
+                    setter.set(false);
+                })
+                .forget();
             }
-        );
+            || ()
+        });
     }
 
     // Auto-combat action bar timer
@@ -100,31 +97,32 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
 
                     *ref_handle.borrow_mut() = 0.0;
 
-                    interval_handle = Some(gloo_timers::callback::Interval::new(tick_ms, move || {
-                        let mut val = ref_handle.borrow_mut();
-                        *val += increment;
-                        if *val >= 100.0 {
-                            flash_handle.set(true);
-                            // Trigger attack animation
-                            attacking_setter.set(true);
-                            let anim_reset = attacking_setter.clone();
-                            gloo_timers::callback::Timeout::new(400, move || {
-                                anim_reset.set(false);
-                            })
-                            .forget();
-                            
-                            attack_cb.emit(());
-                            *val = 0.0;
-                            state_handle.set(0.0);
-                            let flash_reset = flash_handle.clone();
-                            gloo_timers::callback::Timeout::new(300, move || {
-                                flash_reset.set(false);
-                            })
-                            .forget();
-                        } else {
-                            state_handle.set(*val);
-                        }
-                    }));
+                    interval_handle =
+                        Some(gloo_timers::callback::Interval::new(tick_ms, move || {
+                            let mut val = ref_handle.borrow_mut();
+                            *val += increment;
+                            if *val >= 100.0 {
+                                flash_handle.set(true);
+                                // Trigger attack animation
+                                attacking_setter.set(true);
+                                let anim_reset = attacking_setter.clone();
+                                gloo_timers::callback::Timeout::new(400, move || {
+                                    anim_reset.set(false);
+                                })
+                                .forget();
+
+                                attack_cb.emit(());
+                                *val = 0.0;
+                                state_handle.set(0.0);
+                                let flash_reset = flash_handle.clone();
+                                gloo_timers::callback::Timeout::new(300, move || {
+                                    flash_reset.set(false);
+                                })
+                                .forget();
+                            } else {
+                                state_handle.set(*val);
+                            }
+                        }));
                 } else {
                     *progress_ref.borrow_mut() = 0.0;
                     progress_state.set(0.0);
@@ -139,7 +137,11 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     {
         let has_mob = props.current_mob.as_ref().map_or(false, |m| !m.is_dead());
         let player_alive = props.player.is_alive();
-        let mob_action_speed = props.current_mob.as_ref().map(|m| m.action_speed_ms).unwrap_or(0);
+        let mob_action_speed = props
+            .current_mob
+            .as_ref()
+            .map(|m| m.action_speed_ms)
+            .unwrap_or(0);
         let on_mob_attack_cb = props.on_mob_attack.clone();
         let player_hit_setter = player_hit.clone();
         let mob_progress_state = mob_action_progress.clone();
@@ -163,29 +165,30 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
 
                     *ref_handle.borrow_mut() = 0.0;
 
-                    interval_handle = Some(gloo_timers::callback::Interval::new(tick_ms, move || {
-                        let mut val = ref_handle.borrow_mut();
-                        *val += increment;
-                        if *val >= 100.0 {
-                            flash_handle.set(true);
-                            hit_setter.set(true);
-                            let reset = hit_setter.clone();
-                            gloo_timers::callback::Timeout::new(400, move || {
-                                reset.set(false);
-                            })
-                            .forget();
-                            attack_cb.emit(());
-                            *val = 0.0;
-                            state_handle.set(0.0);
-                            let flash_reset = flash_handle.clone();
-                            gloo_timers::callback::Timeout::new(300, move || {
-                                flash_reset.set(false);
-                            })
-                            .forget();
-                        } else {
-                            state_handle.set(*val);
-                        }
-                    }));
+                    interval_handle =
+                        Some(gloo_timers::callback::Interval::new(tick_ms, move || {
+                            let mut val = ref_handle.borrow_mut();
+                            *val += increment;
+                            if *val >= 100.0 {
+                                flash_handle.set(true);
+                                hit_setter.set(true);
+                                let reset = hit_setter.clone();
+                                gloo_timers::callback::Timeout::new(400, move || {
+                                    reset.set(false);
+                                })
+                                .forget();
+                                attack_cb.emit(());
+                                *val = 0.0;
+                                state_handle.set(0.0);
+                                let flash_reset = flash_handle.clone();
+                                gloo_timers::callback::Timeout::new(300, move || {
+                                    flash_reset.set(false);
+                                })
+                                .forget();
+                            } else {
+                                state_handle.set(*val);
+                            }
+                        }));
                 } else {
                     *mob_progress_ref.borrow_mut() = 0.0;
                     mob_progress_state.set(0.0);
@@ -194,6 +197,27 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                 move || drop(interval_handle)
             },
         );
+    }
+
+    // Level-up HUD animation trigger
+    {
+        let flash_state = level_up_flash.clone();
+        let prev_level_ref = prev_player_level.clone();
+        let current_level = props.player.level;
+
+        use_effect_with(current_level, move |level| {
+            let mut prev = prev_level_ref.borrow_mut();
+            if *level > *prev {
+                flash_state.set(true);
+                let flash_reset = flash_state.clone();
+                gloo_timers::callback::Timeout::new(900, move || {
+                    flash_reset.set(false);
+                })
+                .forget();
+            }
+            *prev = *level;
+            || ()
+        });
     }
 
     let on_exit = {
@@ -218,6 +242,13 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
             })
             .forget();
         })
+    };
+
+    let xp_progress_pct = if props.player.max_experience == 0 {
+        0.0
+    } else {
+        ((props.player.experience as f64 / props.player.max_experience as f64) * 100.0)
+            .clamp(0.0, 100.0)
     };
 
     html! {
@@ -280,8 +311,21 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
 
             <div class="action-bar">
                 <div class="player-hud">
-                    <div class={classes!("player-vitals", if *player_hit { "player-hit" } else { "" })}>
+                    <div class="player-header">
                         <div class="player-name">{ &props.player.name }</div>
+                        <div class="player-level-block">
+                            <div class={classes!("player-level", if *level_up_flash { "level-up-flash" } else { "" })}>
+                                { format!("LV {}", props.player.level) }
+                            </div>
+                            <div class={classes!("player-exp-bar", if *level_up_flash { "level-up-flash" } else { "" })}>
+                                <div
+                                    class="player-exp-bar-fill"
+                                    style={format!("width: {:.2}%;", xp_progress_pct)}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div class={classes!("player-vitals", if *player_hit { "player-hit" } else { "" })}>
                         <HealthBar
                             current={props.player.health}
                             max={props.player.max_health}

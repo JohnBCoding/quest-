@@ -73,7 +73,11 @@ impl GameState {
 
     pub fn execute_attack(&mut self) -> bool {
         if let Some(mob) = self.current_mob.as_mut() {
+            let was_alive = !mob.is_dead();
             mob.take_damage(2);
+            if was_alive && mob.is_dead() {
+                self.player.gain_experience(mob.base_xp);
+            }
             true
         } else {
             false
@@ -268,16 +272,19 @@ mod tests {
         assert!(result);
         assert_eq!(state.current_mob.unwrap().health, 3);
         assert_eq!(state.encounters_cleared, 0);
+        assert_eq!(state.player.experience, 0);
     }
 
     #[test]
     fn execute_attack_kills_mob_and_increments_encounters() {
         let (mut state, _) = GameState::new_game();
         state.current_area.base_encounter_amount = 10;
+        let expected_xp = state.current_mob.as_ref().map(|m| m.base_xp).unwrap_or(0);
         let result = state.execute_attack();
         assert!(result);
         assert!(state.current_mob.as_ref().unwrap().is_dead());
         assert_eq!(state.encounters_cleared, 0);
+        assert_eq!(state.player.experience, expected_xp);
 
         let advanced = state.advance_encounter();
         assert!(advanced);
@@ -345,6 +352,42 @@ mod tests {
     }
 
     #[test]
+    fn boss_kill_grants_base_experience() {
+        let (mut state, _) = GameState::new_game();
+        state.current_mob = Mob::get_by_id("rat_lord");
+        state.is_boss_encounter = true;
+        state.player.max_experience = 1_000_000;
+        let expected_xp = state.current_mob.as_ref().map(|m| m.base_xp).unwrap_or(0);
+
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 2;
+        }
+
+        state.execute_attack();
+        let advanced = state.advance_encounter();
+        assert!(advanced);
+        assert_eq!(state.player.experience, expected_xp);
+    }
+
+    #[test]
+    fn player_levels_up_when_xp_threshold_is_met_on_mob_death() {
+        let (mut state, _) = GameState::new_game();
+        state.player.experience = 240;
+        state.current_area.base_encounter_amount = 10;
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 1;
+            mob.base_xp = 10;
+        }
+
+        state.execute_attack();
+        let advanced = state.advance_encounter();
+        assert!(advanced);
+        assert_eq!(state.player.level, 2);
+        assert_eq!(state.player.experience, 0);
+        assert_eq!(state.player.max_experience, 400);
+    }
+
+    #[test]
     fn beach_boss_triggers_fruit_scene_not_town() {
         let (mut state, _) = GameState::new_game();
         state.is_boss_encounter = true;
@@ -357,7 +400,10 @@ mod tests {
         assert!(advanced);
         assert!(state.fruit_scene_active);
         assert!(!state.in_town);
-        assert_eq!(state.pending_fruit_id, Some("fruit_of_instinct".to_string()));
+        assert_eq!(
+            state.pending_fruit_id,
+            Some("fruit_of_instinct".to_string())
+        );
     }
 
     #[test]

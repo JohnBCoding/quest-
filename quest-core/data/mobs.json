@@ -3,6 +3,7 @@
         "id": "rat",
         "name": "Rat",
         "health": 2,
+        "base_xp": 100,
         "base_damage": 0,
         "action_speed_ms": 1000
     },
@@ -10,6 +11,7 @@
         "id": "rat_lord",
         "name": "Rat Lord",
         "health": 5,
+        "base_xp": 250,
         "base_damage": 1,
         "action_speed_ms": 1000
     }
