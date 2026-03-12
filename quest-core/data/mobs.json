@@ -12,7 +12,7 @@
         "name": "Rat Lord",
         "health": 5,
         "base_xp": 250,
-        "base_damage": 1,
+        "base_damage": 10,
         "action_speed_ms": 1000
     }
 ]

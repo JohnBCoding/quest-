@@ -476,6 +476,10 @@ html, body {
     animation: flashHit 0.4s steps(4, end);
 }
 
+.player-vitals.player-heal {
+    animation: healPulse 0.5s steps(5, end);
+}
+
 .player-header {
     display: flex;
     align-items: flex-start;
@@ -487,6 +491,12 @@ html, body {
     font-size: 0.8rem;
     color: var(--c-blue);
     text-transform: uppercase;
+}
+
+.player-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
 }
 
 .player-level-block {
@@ -516,6 +526,26 @@ html, body {
     height: 100%;
     background: var(--c-gold);
     transition: width 0.2s linear;
+}
+
+.player-potion-hud {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 2px solid var(--c-green);
+    background: rgba(100, 185, 100, 0.12);
+    padding: 0.2rem 0.45rem;
+}
+
+.potion-hud-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.potion-hud-count {
+    font-size: 0.7rem;
+    color: var(--c-green);
+    letter-spacing: 0.08em;
 }
 
 .action-buttons {
@@ -640,6 +670,13 @@ html, body {
     50% { transform: translateX(8px); filter: invert(0); }
     75% { transform: translateX(-8px); filter: invert(1); }
     100% { transform: translateX(0); filter: invert(0); }
+}
+
+@keyframes healPulse {
+    0% { transform: scale(1); filter: brightness(1); }
+    40% { transform: scale(1.02); filter: brightness(1.5) saturate(1.4); }
+    80% { transform: scale(1); filter: brightness(1.1) saturate(1.2); }
+    100% { transform: scale(1); filter: brightness(1); }
 }
 
 .mob-hud.dead {
@@ -903,6 +940,10 @@ html, body {
     padding-bottom: 0.5rem;
 }
 
+.configure-actions-cta {
+    margin-top: 0.9rem;
+}
+
 .actions-description {
     font-size: 0.7rem;
     color: var(--c-gray);
@@ -939,6 +980,47 @@ html, body {
     font-size: 0.7rem;
     color: var(--c-green);
     text-transform: uppercase;
+    text-align: right;
+    line-height: 1.5;
+}
+
+.action-main-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.configure-list .action-row {
+    cursor: grab;
+    gap: 0.8rem;
+    align-items: flex-start;
+}
+
+.action-row-draggable.dragging {
+    opacity: 0.5;
+    border-color: var(--c-blue);
+}
+
+.action-reorder-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: 5.5rem;
+    flex-shrink: 0;
+}
+
+.action-move-btn {
+    font-size: 0.65rem;
+    padding: 0.35rem 0.25rem;
+    width: 100%;
+}
+
+.configure-footer-actions {
+    display: flex;
+    width: 100%;
+    max-width: 420px;
+    gap: 1rem;
 }
 
 .stat-row {
