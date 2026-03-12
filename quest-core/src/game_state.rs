@@ -80,6 +80,16 @@ impl GameState {
         }
     }
 
+    pub fn execute_mob_attack(&mut self) -> Option<u32> {
+        let mob = self.current_mob.as_ref()?;
+        if mob.is_dead() || !self.player.is_alive() {
+            return None;
+        }
+        let damage = mob.base_damage;
+        self.player.take_damage(damage);
+        Some(damage)
+    }
+
     pub fn advance_encounter(&mut self) -> bool {
         if let Some(mob) = &self.current_mob {
             if mob.is_dead() {
@@ -299,6 +309,24 @@ mod tests {
         let result = state.execute_attack();
         assert!(!result);
         assert_eq!(state.encounters_cleared, 0);
+    }
+
+    #[test]
+    fn execute_mob_attack_reduces_player_health() {
+        let (mut state, _) = GameState::new_game();
+        state.current_mob = Mob::get_by_id("rat_lord");
+        state.player.health = 10;
+        let damage = state.execute_mob_attack();
+        assert_eq!(damage, Some(1));
+        assert_eq!(state.player.health, 9);
+    }
+
+    #[test]
+    fn execute_mob_attack_ignored_when_no_mob() {
+        let (mut state, _) = GameState::new_game();
+        state.current_mob = None;
+        let damage = state.execute_mob_attack();
+        assert_eq!(damage, None);
     }
 
     #[test]

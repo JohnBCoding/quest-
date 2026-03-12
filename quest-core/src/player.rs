@@ -47,6 +47,10 @@ impl Player {
         self.has_eaten_fruit("fruit_of_instinct")
     }
 
+    pub fn take_damage(&mut self, amount: u32) {
+        self.health = self.health.saturating_sub(amount);
+    }
+
     pub fn eat_fruit(&mut self, fruit_id: &str) {
         if self.has_eaten_fruit(fruit_id) {
             return;
@@ -114,6 +118,15 @@ mod tests {
         let mut player = Player::default();
         player.health = 0;
         assert!(!player.is_alive());
+    }
+
+    #[test]
+    fn take_damage_clamps_at_zero() {
+        let mut player = Player::default();
+        player.take_damage(5);
+        assert_eq!(player.health, 45);
+        player.take_damage(100);
+        assert_eq!(player.health, 0);
     }
 
     #[test]

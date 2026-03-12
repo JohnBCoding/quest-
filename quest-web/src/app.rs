@@ -51,6 +51,7 @@ pub enum AppMsg {
     LoadGame,
     ExitGame,
     AttackMob,
+    MobAttack,
     AdvanceEncounter,
     EnterPortal,
     EatFruit,
@@ -207,6 +208,15 @@ impl Component for App {
                 }
                 false
             }
+            AppMsg::MobAttack => {
+                if let Some(ref mut state) = self.game_state {
+                    if state.execute_mob_attack().is_some() {
+                        storage::save_game(state);
+                        return true;
+                    }
+                }
+                false
+            }
             AppMsg::AdvanceEncounter => {
                 let mut needs_wipe = false;
                 
@@ -291,6 +301,7 @@ impl Component for App {
             Screen::InGame => {
                 let on_exit = ctx.link().callback(|_| AppMsg::ExitGame);
                 let on_attack = ctx.link().callback(|_| AppMsg::AttackMob);
+                let on_mob_attack = ctx.link().callback(|_| AppMsg::MobAttack);
                 let on_enter_portal = ctx.link().callback(|_| AppMsg::EnterPortal);
                 if let Some(ref state) = self.game_state {
                     if state.in_town {
@@ -315,6 +326,7 @@ impl Component for App {
                                 has_auto_combat={state.player.has_auto_combat()}
                                 on_exit={on_exit}
                                 on_attack={on_attack}
+                                on_mob_attack={on_mob_attack}
                                 on_enter_portal={on_enter_portal}
                             />
                         }

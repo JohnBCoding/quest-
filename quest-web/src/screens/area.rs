@@ -15,6 +15,7 @@ pub struct AreaScreenProps {
     pub has_auto_combat: bool,
     pub on_exit: Callback<()>,
     pub on_attack: Callback<()>,
+    pub on_mob_attack: Callback<()>,
     pub on_enter_portal: Callback<()>,
 }
 
@@ -26,6 +27,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     let action_progress = use_state(|| 0.0f64);
     let action_progress_ref = use_mut_ref(|| 0.0f64);
     let action_flash = use_state(|| false);
+    let player_hit = use_state(|| false);
 
     // Boss spawn animation
     {
@@ -131,6 +133,40 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         );
     }
 
+    // Mob auto-attack timer
+    {
+        let has_mob = props.current_mob.as_ref().map_or(false, |m| !m.is_dead());
+        let player_alive = props.player.is_alive();
+        let mob_action_speed = props.current_mob.as_ref().map(|m| m.action_speed_ms).unwrap_or(0);
+        let on_mob_attack_cb = props.on_mob_attack.clone();
+        let player_hit_setter = player_hit.clone();
+
+        use_effect_with(
+            (has_mob, player_alive, mob_action_speed),
+            move |(mob_alive, alive, speed)| {
+                let mut interval_handle: Option<gloo_timers::callback::Interval> = None;
+
+                if *mob_alive && *alive {
+                    let attack_cb = on_mob_attack_cb.clone();
+                    let hit_setter = player_hit_setter.clone();
+                    let speed_ms = if *speed == 0 { 1000 } else { *speed };
+
+                    interval_handle = Some(gloo_timers::callback::Interval::new(speed_ms, move || {
+                        hit_setter.set(true);
+                        let reset = hit_setter.clone();
+                        gloo_timers::callback::Timeout::new(400, move || {
+                            reset.set(false);
+                        })
+                        .forget();
+                        attack_cb.emit(());
+                    }));
+                }
+
+                move || drop(interval_handle)
+            },
+        );
+    }
+
     let on_exit = {
         let cb = props.on_exit.clone();
         Callback::from(move |_: MouseEvent| cb.emit(()))
@@ -214,7 +250,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
             </div>
 
             <div class="action-bar">
-                <div class="player-hud">
+                <div class={classes!("player-hud", if *player_hit { "player-hit" } else { "" })}>
                     <div class="player-name">{ &props.player.name }</div>
                     <HealthBar
                         current={props.player.health}

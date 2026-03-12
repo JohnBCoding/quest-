@@ -463,6 +463,11 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    transition: transform 0.1s linear, filter 0.1s linear;
+}
+
+.player-hud.player-hit {
+    animation: flashHit 0.4s steps(4, end);
 }
 
 .player-hud .player-name {
