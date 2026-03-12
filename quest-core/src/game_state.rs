@@ -5,6 +5,12 @@ use crate::mob::Mob;
 use crate::player::Player;
 use crate::rng::{RngManager, RngSnapshot};
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExecutedPlayerAction {
+    Attack,
+    HealthPotion { healed: u32 },
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameState {
     pub player: Player,
@@ -18,6 +24,8 @@ pub struct GameState {
     pub fruit_scene_active: bool,
     #[serde(default)]
     pub pending_fruit_id: Option<String>,
+    #[serde(default)]
+    pub action_counter: u32,
     pub version: u32,
 }
 
@@ -36,6 +44,7 @@ impl GameState {
             in_town: false,
             fruit_scene_active: false,
             pending_fruit_id: None,
+            action_counter: 0,
             version: SAVE_VERSION,
         };
         (state, rng_manager)
@@ -46,7 +55,7 @@ impl GameState {
     }
 
     pub fn deserialize(data: &str) -> Result<Self, String> {
-        let state: GameState =
+        let mut state: GameState =
             serde_json::from_str(data).map_err(|e| format!("Invalid save data: {}", e))?;
 
         if state.version != SAVE_VERSION {
@@ -54,6 +63,11 @@ impl GameState {
                 "Incompatible save version: expected {}, got {}",
                 SAVE_VERSION, state.version
             ));
+        }
+
+        state.player.ensure_auto_combat_actions();
+        if state.in_town {
+            state.player.refill_health_potions();
         }
 
         Ok(state)
@@ -82,6 +96,41 @@ impl GameState {
         } else {
             false
         }
+    }
+
+    pub fn execute_prioritized_action(&mut self) -> Option<ExecutedPlayerAction> {
+        let mob = self.current_mob.as_ref()?;
+        if mob.is_dead() || !self.player.is_alive() {
+            return None;
+        }
+
+        let next_action_number = self.action_counter.saturating_add(1);
+        let actions = self.player.actions.clone();
+
+        for action in actions {
+            if !action.trigger_matches(next_action_number) {
+                continue;
+            }
+
+            match action.id.as_str() {
+                "health_potion" => {
+                    let threshold = action.health_threshold_percent().unwrap_or(50);
+                    if let Some(healed) = self.player.use_health_potion(threshold) {
+                        self.action_counter = next_action_number;
+                        return Some(ExecutedPlayerAction::HealthPotion { healed });
+                    }
+                }
+                "attack" => {
+                    if self.execute_attack() {
+                        self.action_counter = next_action_number;
+                        return Some(ExecutedPlayerAction::Attack);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        None
     }
 
     pub fn execute_mob_attack(&mut self) -> Option<u32> {
@@ -121,6 +170,7 @@ impl GameState {
             self.pending_fruit_id = Some("fruit_of_instinct".to_string());
         } else {
             self.in_town = true;
+            self.player.refill_health_potions();
         }
     }
 
@@ -174,6 +224,7 @@ impl GameState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::action::{Action, ActionCondition, ActionTrigger};
 
     #[test]
     fn new_game_creates_valid_state() {
@@ -183,6 +234,7 @@ mod tests {
         assert_eq!(state.version, SAVE_VERSION);
         assert!(!state.fruit_scene_active);
         assert!(state.pending_fruit_id.is_none());
+        assert_eq!(state.action_counter, 0);
     }
 
     #[test]
@@ -429,7 +481,10 @@ mod tests {
         assert!(!state.fruit_scene_active);
         assert!(state.pending_fruit_id.is_none());
         assert!(state.player.has_auto_combat());
-        assert_eq!(state.player.actions.len(), 1);
+        assert_eq!(state.player.actions.len(), 2);
+        assert_eq!(state.player.actions[0].id, "health_potion");
+        assert_eq!(state.player.actions[1].id, "attack");
+        assert_eq!(state.player.health_potion_uses, 5);
     }
 
     #[test]
@@ -531,5 +586,144 @@ mod tests {
         let success = state.enter_boss_portal(&mut rng);
         assert!(!success);
         assert!(!state.is_boss_encounter);
+    }
+
+    #[test]
+    fn prioritized_action_uses_potion_before_attack_when_low_health() {
+        let (mut state, _) = GameState::new_game();
+        state.player.eat_fruit("fruit_of_instinct");
+        state.player.health = 20;
+        state.current_mob = Mob::get_by_id("rat_lord");
+        let mob_hp_before = state.current_mob.as_ref().unwrap().health;
+
+        let result = state.execute_prioritized_action();
+        assert_eq!(
+            result,
+            Some(ExecutedPlayerAction::HealthPotion { healed: 25 })
+        );
+        assert_eq!(state.player.health, 45);
+        assert_eq!(state.player.health_potion_uses, 4);
+        assert_eq!(state.current_mob.as_ref().unwrap().health, mob_hp_before);
+        assert_eq!(state.action_counter, 1);
+    }
+
+    #[test]
+    fn prioritized_action_falls_through_to_attack_when_potion_not_eligible() {
+        let (mut state, _) = GameState::new_game();
+        state.player.eat_fruit("fruit_of_instinct");
+        state.player.health = 30;
+        state.current_mob = Mob::get_by_id("rat_lord");
+        let mob_hp_before = state.current_mob.as_ref().unwrap().health;
+
+        let result = state.execute_prioritized_action();
+        assert_eq!(result, Some(ExecutedPlayerAction::Attack));
+        assert_eq!(
+            state.current_mob.as_ref().unwrap().health,
+            mob_hp_before - 2
+        );
+        assert_eq!(state.player.health_potion_uses, 5);
+        assert_eq!(state.action_counter, 1);
+    }
+
+    #[test]
+    fn prioritized_action_falls_through_when_potion_empty() {
+        let (mut state, _) = GameState::new_game();
+        state.player.eat_fruit("fruit_of_instinct");
+        state.player.health = 10;
+        state.player.health_potion_uses = 0;
+        state.current_mob = Mob::get_by_id("rat_lord");
+        let mob_hp_before = state.current_mob.as_ref().unwrap().health;
+
+        let result = state.execute_prioritized_action();
+        assert_eq!(result, Some(ExecutedPlayerAction::Attack));
+        assert_eq!(
+            state.current_mob.as_ref().unwrap().health,
+            mob_hp_before - 2
+        );
+    }
+
+    #[test]
+    fn town_entry_refills_potions() {
+        let (mut state, _) = GameState::new_game();
+        state.current_area = Area::get_by_id("the_fringe").unwrap();
+        state.is_boss_encounter = true;
+        state.player.eat_fruit("fruit_of_instinct");
+        state.player.health_potion_uses = 1;
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 0;
+        }
+
+        state.advance_encounter();
+        assert!(state.in_town);
+        assert_eq!(state.player.health_potion_uses, 5);
+    }
+
+    #[test]
+    fn deserialize_migrates_old_auto_combat_layout() {
+        let old_save = r#"{
+            "player": {
+                "name":"Hero",
+                "level":1,
+                "health":50,
+                "max_health":50,
+                "experience":0,
+                "max_experience":250,
+                "eaten_fruits":["fruit_of_instinct"],
+                "actions":[{"id":"attack","name":"Attack","trigger":"EveryAction"}],
+                "action_speed_ms":1000
+            },
+            "current_area": {
+                "id":"the_beach",
+                "name":"The Beach",
+                "description":"x",
+                "required_level":1,
+                "base_encounter_amount":1,
+                "bosses":["rat_lord"]
+            },
+            "current_mob": null,
+            "encounters_cleared":0,
+            "rng_snapshot":{"seeds":{"mob_spawns":1}},
+            "is_boss_encounter":false,
+            "in_town":false,
+            "fruit_scene_active":false,
+            "pending_fruit_id":null,
+            "version":3
+        }"#;
+
+        let state = GameState::deserialize(old_save).unwrap();
+        assert_eq!(state.player.actions.len(), 2);
+        assert_eq!(state.player.actions[0].id, "health_potion");
+        assert_eq!(state.player.actions[1].id, "attack");
+        assert_eq!(
+            state.player.actions[0].condition,
+            ActionCondition::HealthBelowPercent(50)
+        );
+        assert_eq!(state.player.health_potion_uses, 5);
+        assert_eq!(state.player.health_potion_capacity, 5);
+    }
+
+    #[test]
+    fn prioritized_action_respects_trigger_frequency() {
+        let (mut state, _) = GameState::new_game();
+        state.current_mob = Mob::get_by_id("rat_lord");
+        state.player.actions = vec![
+            Action {
+                id: "health_potion".to_string(),
+                name: "Health Potion".to_string(),
+                trigger: ActionTrigger::EveryNActions(2),
+                condition: ActionCondition::HealthBelowPercent(90),
+            },
+            Action::default_attack(),
+        ];
+        state.player.health_potion_uses = 5;
+        state.player.health = 10;
+
+        let first = state.execute_prioritized_action();
+        assert_eq!(first, Some(ExecutedPlayerAction::Attack));
+        let second = state.execute_prioritized_action();
+        assert_eq!(
+            second,
+            Some(ExecutedPlayerAction::HealthPotion { healed: 25 })
+        );
     }
 }

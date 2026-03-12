@@ -7,6 +7,8 @@ use crate::screens::main_menu::MainMenuScreen;
 use crate::screens::town::TownScreen;
 use crate::storage;
 
+use quest_core::action::Action;
+use quest_core::game_state::ExecutedPlayerAction;
 use quest_core::game_state::GameState;
 use quest_core::rng::RngManager;
 
@@ -33,6 +35,12 @@ pub enum PostTransitionLogic {
     TravelToArea(String),
 }
 
+#[derive(Clone, PartialEq)]
+pub enum PlayerActionKind {
+    Attack,
+    HealPotion,
+}
+
 pub struct App {
     screen: Screen,
     pending_screen: Option<Screen>,
@@ -41,6 +49,9 @@ pub struct App {
     rng_manager: Option<RngManager>,
     from_fruit_scene: bool,
     post_transition_logic: Option<PostTransitionLogic>,
+    last_player_action_kind: Option<PlayerActionKind>,
+    last_player_action_event_id: u64,
+    last_mob_action_event_id: u64,
 }
 
 pub enum AppMsg {
@@ -51,12 +62,14 @@ pub enum AppMsg {
     LoadGame,
     ExitGame,
     AttackMob,
+    PerformAutoAction,
     MobAttack,
     AdvanceEncounter,
     EnterPortal,
     EatFruit,
     CloseCharacterSheet,
     OpenCharacterSheet,
+    SaveActionPriority(Vec<Action>),
     TravelToArea(String),
     NavigateWithLogic(Screen, PostTransitionLogic),
 }
@@ -74,6 +87,9 @@ impl Component for App {
             rng_manager: None,
             from_fruit_scene: false,
             post_transition_logic: None,
+            last_player_action_kind: None,
+            last_player_action_event_id: 0,
+            last_mob_action_event_id: 0,
         }
     }
 
@@ -169,6 +185,9 @@ impl Component for App {
                 storage::save_game(&state);
                 self.game_state = Some(state);
                 self.rng_manager = Some(rng);
+                self.last_player_action_kind = None;
+                self.last_player_action_event_id = 0;
+                self.last_mob_action_event_id = 0;
                 ctx.link().send_message(AppMsg::Navigate(Screen::InGame));
                 false
             }
@@ -177,6 +196,9 @@ impl Component for App {
                     let rng = state.restore_rng();
                     self.game_state = Some(state);
                     self.rng_manager = Some(rng);
+                    self.last_player_action_kind = None;
+                    self.last_player_action_event_id = 0;
+                    self.last_mob_action_event_id = 0;
                     ctx.link().send_message(AppMsg::Navigate(Screen::InGame));
                 }
                 false
@@ -187,13 +209,46 @@ impl Component for App {
                 }
                 self.game_state = None;
                 self.rng_manager = None;
+                self.last_player_action_kind = None;
+                self.last_player_action_event_id = 0;
+                self.last_mob_action_event_id = 0;
                 ctx.link().send_message(AppMsg::Navigate(Screen::MainMenu));
                 false
             }
             AppMsg::AttackMob => {
                 if let Some(ref mut state) = self.game_state {
                     if state.execute_attack() {
+                        self.last_player_action_kind = Some(PlayerActionKind::Attack);
+                        self.last_player_action_event_id =
+                            self.last_player_action_event_id.saturating_add(1);
                         let is_dead = state.current_mob.as_ref().map_or(false, |m| m.is_dead());
+                        storage::save_game(state);
+
+                        if is_dead {
+                            let link = ctx.link().clone();
+                            gloo_timers::callback::Timeout::new(2000, move || {
+                                link.send_message(AppMsg::AdvanceEncounter);
+                            })
+                            .forget();
+                        }
+
+                        return true;
+                    }
+                }
+                false
+            }
+            AppMsg::PerformAutoAction => {
+                if let Some(ref mut state) = self.game_state {
+                    if let Some(executed) = state.execute_prioritized_action() {
+                        let is_dead = state.current_mob.as_ref().map_or(false, |m| m.is_dead());
+                        self.last_player_action_kind = match executed {
+                            ExecutedPlayerAction::Attack => Some(PlayerActionKind::Attack),
+                            ExecutedPlayerAction::HealthPotion { .. } => {
+                                Some(PlayerActionKind::HealPotion)
+                            }
+                        };
+                        self.last_player_action_event_id =
+                            self.last_player_action_event_id.saturating_add(1);
                         storage::save_game(state);
 
                         if is_dead {
@@ -212,6 +267,8 @@ impl Component for App {
             AppMsg::MobAttack => {
                 if let Some(ref mut state) = self.game_state {
                     if state.execute_mob_attack().is_some() {
+                        self.last_mob_action_event_id =
+                            self.last_mob_action_event_id.saturating_add(1);
                         storage::save_game(state);
                         return true;
                     }
@@ -287,6 +344,14 @@ impl Component for App {
                     .send_message(AppMsg::Navigate(Screen::CharacterSheet));
                 false
             }
+            AppMsg::SaveActionPriority(actions) => {
+                if let Some(ref mut state) = self.game_state {
+                    state.player.actions = actions;
+                    storage::save_game(state);
+                    return true;
+                }
+                false
+            }
             AppMsg::TravelToArea(area_id) => {
                 ctx.link().send_message(AppMsg::NavigateWithLogic(
                     Screen::InGame,
@@ -318,6 +383,7 @@ impl Component for App {
             Screen::InGame => {
                 let on_exit = ctx.link().callback(|_| AppMsg::ExitGame);
                 let on_attack = ctx.link().callback(|_| AppMsg::AttackMob);
+                let on_auto_action = ctx.link().callback(|_| AppMsg::PerformAutoAction);
                 let on_mob_attack = ctx.link().callback(|_| AppMsg::MobAttack);
                 let on_enter_portal = ctx.link().callback(|_| AppMsg::EnterPortal);
                 if let Some(ref state) = self.game_state {
@@ -345,8 +411,12 @@ impl Component for App {
                                 has_auto_combat={state.player.has_auto_combat()}
                                 on_exit={on_exit}
                                 on_attack={on_attack}
+                                on_auto_action={on_auto_action}
                                 on_mob_attack={on_mob_attack}
                                 on_enter_portal={on_enter_portal}
+                                last_player_action_kind={self.last_player_action_kind.clone()}
+                                player_action_event_id={self.last_player_action_event_id}
+                                mob_action_event_id={self.last_mob_action_event_id}
                             />
                         }
                     }
@@ -371,10 +441,14 @@ impl Component for App {
             Screen::CharacterSheet => {
                 if let Some(ref state) = self.game_state {
                     let on_close = ctx.link().callback(|_| AppMsg::CloseCharacterSheet);
+                    let on_save_actions = ctx
+                        .link()
+                        .callback(|actions| AppMsg::SaveActionPriority(actions));
                     html! {
                         <CharacterSheetScreen
                             player={state.player.clone()}
                             on_close={on_close}
+                            on_save_actions={on_save_actions}
                         />
                     }
                 } else {

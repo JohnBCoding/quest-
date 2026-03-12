@@ -17,6 +17,10 @@ pub struct Player {
     pub actions: Vec<Action>,
     #[serde(default = "default_action_speed")]
     pub action_speed_ms: u32,
+    #[serde(default)]
+    pub health_potion_uses: u32,
+    #[serde(default = "default_health_potion_capacity")]
+    pub health_potion_capacity: u32,
 }
 
 fn default_action_speed() -> u32 {
@@ -25,6 +29,10 @@ fn default_action_speed() -> u32 {
 
 fn default_max_experience() -> u64 {
     250
+}
+
+fn default_health_potion_capacity() -> u32 {
+    5
 }
 
 impl Player {
@@ -39,6 +47,8 @@ impl Player {
             eaten_fruits: Vec::new(),
             actions: Vec::new(),
             action_speed_ms: 1000,
+            health_potion_uses: 0,
+            health_potion_capacity: default_health_potion_capacity(),
         }
     }
 
@@ -54,8 +64,18 @@ impl Player {
         self.has_eaten_fruit("fruit_of_instinct")
     }
 
+    pub fn has_action(&self, action_id: &str) -> bool {
+        self.actions.iter().any(|a| a.id == action_id)
+    }
+
     pub fn take_damage(&mut self, amount: u32) {
         self.health = self.health.saturating_sub(amount);
+    }
+
+    pub fn heal(&mut self, amount: u32) -> u32 {
+        let before = self.health;
+        self.health = self.health.saturating_add(amount).min(self.max_health);
+        self.health.saturating_sub(before)
     }
 
     pub fn gain_experience(&mut self, amount: u64) -> bool {
@@ -80,6 +100,63 @@ impl Player {
         self.apply_fruit_effect(fruit_id);
     }
 
+    pub fn ensure_auto_combat_actions(&mut self) {
+        if !self.has_auto_combat() {
+            return;
+        }
+
+        let had_health_potion = self.has_action("health_potion");
+        let attack_idx = self.actions.iter().position(|a| a.id == "attack");
+
+        if !had_health_potion {
+            let potion = Action::default_health_potion();
+            if let Some(idx) = attack_idx {
+                self.actions.insert(idx, potion);
+            } else {
+                self.actions.push(potion);
+            }
+        }
+
+        if attack_idx.is_none() {
+            self.actions.push(Action::default_attack());
+        }
+
+        if !had_health_potion {
+            self.refill_health_potions();
+        }
+    }
+
+    pub fn refill_health_potions(&mut self) {
+        if self.has_action("health_potion") {
+            self.health_potion_uses = self.health_potion_capacity;
+        }
+    }
+
+    pub fn can_use_health_potion(&self, threshold_percent: u32) -> bool {
+        if self.health_potion_uses == 0 || self.max_health == 0 {
+            return false;
+        }
+
+        let threshold_hp =
+            ((self.max_health as f64) * (threshold_percent as f64 / 100.0)).floor() as u32;
+        self.health < threshold_hp
+    }
+
+    pub fn use_health_potion(&mut self, threshold_percent: u32) -> Option<u32> {
+        if !self.can_use_health_potion(threshold_percent) {
+            return None;
+        }
+
+        let heal_amount = ((self.max_health as f64) * 0.5).ceil() as u32;
+        let healed = self.heal(heal_amount.max(1));
+        if healed == 0 {
+            return None;
+        }
+
+        self.health_potion_uses = self.health_potion_uses.saturating_sub(1);
+        Some(healed)
+    }
+
     fn level_up(&mut self) {
         self.level = self.level.saturating_add(1);
         self.experience = 0;
@@ -91,9 +168,7 @@ impl Player {
     fn apply_fruit_effect(&mut self, fruit_id: &str) {
         match fruit_id {
             "fruit_of_instinct" => {
-                if !self.actions.iter().any(|a| a.id == "attack") {
-                    self.actions.push(Action::default_attack());
-                }
+                self.ensure_auto_combat_actions();
             }
             _ => {}
         }
@@ -109,7 +184,7 @@ impl Default for Player {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::action::ActionTrigger;
+    use crate::action::{ActionCondition, ActionTrigger};
 
     #[test]
     fn default_player_has_correct_name() {
@@ -128,6 +203,8 @@ mod tests {
         assert!(player.eaten_fruits.is_empty());
         assert!(player.actions.is_empty());
         assert_eq!(player.action_speed_ms, 1000);
+        assert_eq!(player.health_potion_uses, 0);
+        assert_eq!(player.health_potion_capacity, 5);
     }
 
     #[test]
@@ -204,9 +281,15 @@ mod tests {
         let mut player = Player::default();
         player.eat_fruit("fruit_of_instinct");
         assert!(player.has_eaten_fruit("fruit_of_instinct"));
-        assert_eq!(player.actions.len(), 1);
-        assert_eq!(player.actions[0].id, "attack");
+        assert_eq!(player.actions.len(), 2);
+        assert_eq!(player.actions[0].id, "health_potion");
+        assert_eq!(player.actions[1].id, "attack");
         assert_eq!(player.actions[0].trigger, ActionTrigger::EveryAction);
+        assert_eq!(
+            player.actions[0].condition,
+            ActionCondition::HealthBelowPercent(50)
+        );
+        assert_eq!(player.health_potion_uses, 5);
     }
 
     #[test]
@@ -234,7 +317,48 @@ mod tests {
         player.eat_fruit("fruit_of_instinct");
         player.eat_fruit("fruit_of_instinct");
         assert_eq!(player.eaten_fruits.len(), 1);
-        assert_eq!(player.actions.len(), 1);
+        assert_eq!(player.actions.len(), 2);
+        assert_eq!(player.health_potion_uses, 5);
+    }
+
+    #[test]
+    fn use_health_potion_heals_and_consumes_use() {
+        let mut player = Player::default();
+        player.eat_fruit("fruit_of_instinct");
+        player.health = 10;
+        let healed = player.use_health_potion(50);
+        assert_eq!(healed, Some(25));
+        assert_eq!(player.health, 35);
+        assert_eq!(player.health_potion_uses, 4);
+    }
+
+    #[test]
+    fn health_potion_does_not_trigger_at_or_above_threshold() {
+        let mut player = Player::default();
+        player.eat_fruit("fruit_of_instinct");
+        player.health = 25;
+        assert_eq!(player.use_health_potion(50), None);
+        assert_eq!(player.health_potion_uses, 5);
+    }
+
+    #[test]
+    fn refill_health_potions_restores_capacity() {
+        let mut player = Player::default();
+        player.eat_fruit("fruit_of_instinct");
+        player.health_potion_uses = 1;
+        player.refill_health_potions();
+        assert_eq!(player.health_potion_uses, 5);
+    }
+
+    #[test]
+    fn ensure_auto_combat_actions_migrates_old_layout() {
+        let mut player = Player::default();
+        player.eaten_fruits.push("fruit_of_instinct".to_string());
+        player.actions.push(Action::default_attack());
+        player.ensure_auto_combat_actions();
+        assert_eq!(player.actions[0].id, "health_potion");
+        assert_eq!(player.actions[1].id, "attack");
+        assert_eq!(player.health_potion_uses, 5);
     }
 
     #[test]
