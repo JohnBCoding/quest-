@@ -90,14 +90,14 @@ impl App {
     fn transition_out_duration_ms(effect: TransitionEffect) -> u32 {
         match effect {
             TransitionEffect::Wipe => 400,
-            TransitionEffect::TownPortal => 560,
+            TransitionEffect::TownPortal => 700,
         }
     }
 
     fn transition_in_duration_ms(effect: TransitionEffect) -> u32 {
         match effect {
             TransitionEffect::Wipe => 400,
-            TransitionEffect::TownPortal => 850,
+            TransitionEffect::TownPortal => 1063,
         }
     }
 
