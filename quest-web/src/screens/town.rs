@@ -6,7 +6,7 @@ pub struct TownScreenProps {
     pub on_exit: Callback<()>,
     pub on_open_character_sheet: Callback<()>,
     pub on_open_inventory: Callback<()>,
-    pub on_travel_fringe: Callback<()>,
+    pub on_travel_dying_forest: Callback<()>,
 }
 
 #[function_component(TownScreen)]
@@ -22,7 +22,7 @@ pub fn town_screen(props: &TownScreenProps) -> Html {
     };
 
     let on_travel = {
-        let cb = props.on_travel_fringe.clone();
+        let cb = props.on_travel_dying_forest.clone();
         Callback::from(move |_: MouseEvent| cb.emit(()))
     };
 
@@ -54,7 +54,7 @@ pub fn town_screen(props: &TownScreenProps) -> Html {
                                         { "Inventory" }
                                     </button>
                                     <button class="btn btn-warning town-btn" onclick={on_travel}>
-                                        { "Travel to The Fringe" }
+                                        { "Travel to The Dying Forest" }
                                     </button>
                                 </>
                             }

@@ -1,0 +1,59 @@
+[
+  {
+    "id": "dying_forest_items",
+    "base_drop_chance_percent": 25,
+    "notes": "Category weights: weapons=4, armor=4, fruit=1. Weapons and armor are even; fruit is intentionally rarer.",
+    "categories": [
+      {
+        "category": "weapons",
+        "weight": 4,
+        "items": [
+          {
+            "item_id": "dull_claymore",
+            "weight": 1
+          },
+          {
+            "item_id": "jagged_bone_dirk",
+            "weight": 1
+          },
+          {
+            "item_id": "rusted_gladius",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "category": "armor",
+        "weight": 4,
+        "items": [
+          {
+            "item_id": "battered_helm",
+            "weight": 1
+          },
+          {
+            "item_id": "hide_vest",
+            "weight": 1
+          },
+          {
+            "item_id": "stitched_pelt_grips",
+            "weight": 1
+          },
+          {
+            "item_id": "worn_leather_boots",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "category": "fruit",
+        "weight": 1,
+        "items": [
+          {
+            "item_id": "fruit_of_assassination",
+            "weight": 1
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -36,8 +36,44 @@
         "action_speed_ms": 1500
     },
     {
+        "id": "poacher",
+        "name": "Poacher",
+        "health": 5,
+        "base_xp": 100,
+        "base_damage": 1,
+        "max_damage": 1,
+        "action_speed_ms": 1500
+    },
+    {
+        "id": "hungry_wolf",
+        "name": "Hungry Wolf",
+        "health": 5,
+        "base_xp": 100,
+        "base_damage": 1,
+        "max_damage": 1,
+        "action_speed_ms": 1500
+    },
+    {
         "id": "rat_face",
         "name": "Rat Face",
+        "health": 10,
+        "base_xp": 250,
+        "base_damage": 2,
+        "max_damage": 5,
+        "action_speed_ms": 1250
+    },
+    {
+        "id": "old_miller",
+        "name": "Old Miller",
+        "health": 10,
+        "base_xp": 250,
+        "base_damage": 2,
+        "max_damage": 5,
+        "action_speed_ms": 1250
+    },
+    {
+        "id": "alpha_wolf",
+        "name": "Alpha Wolf",
         "health": 10,
         "base_xp": 250,
         "base_damage": 2,

@@ -16,6 +16,10 @@ pub struct Area {
     pub mobs: Vec<String>,
     #[serde(default)]
     pub bosses: Vec<String>,
+    #[serde(default)]
+    pub mob_spawn_table_id: Option<String>,
+    #[serde(default)]
+    pub item_spawn_table_id: Option<String>,
 }
 
 pub static AREA_REGISTRY: Lazy<HashMap<String, Area>> = Lazy::new(|| {
@@ -38,6 +42,8 @@ impl Area {
         base_encounter_amount: u32,
         mobs: Vec<String>,
         bosses: Vec<String>,
+        mob_spawn_table_id: Option<String>,
+        item_spawn_table_id: Option<String>,
     ) -> Self {
         Self {
             id: id.to_string(),
@@ -47,6 +53,8 @@ impl Area {
             base_encounter_amount,
             mobs,
             bosses,
+            mob_spawn_table_id,
+            item_spawn_table_id,
         }
     }
 
@@ -87,6 +95,13 @@ mod tests {
     }
 
     #[test]
+    fn starting_area_has_no_spawn_table_ids() {
+        let area = Area::starting_area();
+        assert!(area.mob_spawn_table_id.is_none());
+        assert!(area.item_spawn_table_id.is_none());
+    }
+
+    #[test]
     fn custom_area_creation() {
         let area = Area::new(
             "dark_forest",
@@ -96,6 +111,8 @@ mod tests {
             15,
             vec!["bat".to_string()],
             vec!["tree_ent".to_string()],
+            Some("dark_forest_mobs".to_string()),
+            Some("dark_forest_items".to_string()),
         );
         assert_eq!(area.id, "dark_forest");
         assert_eq!(area.name, "Dark Forest");
@@ -104,6 +121,14 @@ mod tests {
         assert_eq!(area.base_encounter_amount, 15);
         assert_eq!(area.mobs, vec!["bat"]);
         assert_eq!(area.bosses, vec!["tree_ent"]);
+        assert_eq!(
+            area.mob_spawn_table_id,
+            Some("dark_forest_mobs".to_string())
+        );
+        assert_eq!(
+            area.item_spawn_table_id,
+            Some("dark_forest_items".to_string())
+        );
     }
 
     #[test]
@@ -123,5 +148,36 @@ mod tests {
     #[test]
     fn get_by_id_returns_none_for_invalid_id() {
         assert!(Area::get_by_id("invalid_area_id_123").is_none());
+    }
+
+    #[test]
+    fn get_by_id_returns_dying_forest_with_spawn_tables() {
+        let area = Area::get_by_id("dying_forest").expect("dying_forest should exist");
+        assert_eq!(area.name, "The Dying Forest");
+        assert_eq!(area.base_encounter_amount, 10);
+        assert_eq!(
+            area.mob_spawn_table_id.as_deref(),
+            Some("dying_forest_mobs")
+        );
+        assert_eq!(
+            area.item_spawn_table_id.as_deref(),
+            Some("dying_forest_items")
+        );
+    }
+
+    #[test]
+    fn area_deserialization_without_spawn_tables_defaults_to_none() {
+        let json = r#"{
+            "id":"legacy_area",
+            "name":"Legacy Area",
+            "description":"legacy",
+            "connected_areas":[],
+            "base_encounter_amount":1,
+            "mobs":[],
+            "bosses":[]
+        }"#;
+        let area: Area = serde_json::from_str(json).expect("legacy area should deserialize");
+        assert!(area.mob_spawn_table_id.is_none());
+        assert!(area.item_spawn_table_id.is_none());
     }
 }

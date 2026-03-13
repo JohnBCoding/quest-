@@ -25,5 +25,23 @@
         "bosses": [
             "rat_face"
         ]
+    },
+    {
+        "id": "dying_forest",
+        "name": "The Dying Forest",
+        "description": "Trees bend like old bones and the underbrush reeks of rot. Predators and desperate outlaws stalk the shadows.",
+        "connected_areas": [],
+        "base_encounter_amount": 10,
+        "mobs": [
+            "mugger",
+            "poacher",
+            "hungry_wolf"
+        ],
+        "bosses": [
+            "old_miller",
+            "alpha_wolf"
+        ],
+        "mob_spawn_table_id": "dying_forest_mobs",
+        "item_spawn_table_id": "dying_forest_items"
     }
 ]

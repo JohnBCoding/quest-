@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::action::Action;
 use crate::equipment::{EquipmentItem, EquipmentSlot};
+use crate::item::{Item, ItemType};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Player {
@@ -25,9 +26,19 @@ pub struct Player {
     #[serde(default)]
     pub equipment_inventory: Vec<String>,
     #[serde(default)]
+    pub item_inventory: Vec<String>,
+    #[serde(default)]
     pub equipped_main_hand: Option<String>,
     #[serde(default)]
     pub equipped_off_hand: Option<String>,
+    #[serde(default)]
+    pub equipped_head: Option<String>,
+    #[serde(default)]
+    pub equipped_body: Option<String>,
+    #[serde(default)]
+    pub equipped_hands: Option<String>,
+    #[serde(default)]
+    pub equipped_feet: Option<String>,
 }
 
 fn default_action_speed() -> u32 {
@@ -65,8 +76,13 @@ impl Player {
             health_potion_uses: 0,
             health_potion_capacity: default_health_potion_capacity(),
             equipment_inventory: Vec::new(),
+            item_inventory: Vec::new(),
             equipped_main_hand: None,
             equipped_off_hand: None,
+            equipped_head: None,
+            equipped_body: None,
+            equipped_hands: None,
+            equipped_feet: None,
         }
     }
 
@@ -188,12 +204,49 @@ impl Player {
             "fruit_of_instinct" => {
                 self.ensure_auto_combat_actions();
             }
+            "fruit_of_assassination" => {
+                self.ensure_assassination_action();
+            }
             _ => {}
+        }
+    }
+
+    fn ensure_assassination_action(&mut self) {
+        if self.has_action("assassination") {
+            return;
+        }
+
+        let assassination = Action::default_assassination();
+        let attack_idx = self.actions.iter().position(|a| a.id == "attack");
+        if let Some(idx) = attack_idx {
+            self.actions.insert(idx, assassination);
+        } else {
+            self.actions.push(assassination);
         }
     }
 
     pub fn add_equipment_item(&mut self, item_id: &str) {
         self.equipment_inventory.push(item_id.to_string());
+    }
+
+    pub fn add_item(&mut self, item_id: &str) {
+        self.item_inventory.push(item_id.to_string());
+    }
+
+    pub fn eat_item_inventory_fruit(&mut self, item_id: &str) -> bool {
+        let Some(idx) = self.item_inventory.iter().position(|id| id == item_id) else {
+            return false;
+        };
+        let Some(item) = Item::get_by_id(item_id) else {
+            return false;
+        };
+        if item.item_type != ItemType::Fruit {
+            return false;
+        }
+
+        self.item_inventory.remove(idx);
+        self.eat_fruit(item_id);
+        true
     }
 
     pub fn list_equipment_inventory_items(&self) -> Vec<EquipmentItem> {
@@ -203,10 +256,21 @@ impl Player {
             .collect()
     }
 
+    pub fn list_item_inventory_items(&self) -> Vec<Item> {
+        self.item_inventory
+            .iter()
+            .filter_map(|id| Item::get_by_id(id))
+            .collect()
+    }
+
     pub fn equipped_item(&self, slot: EquipmentSlot) -> Option<EquipmentItem> {
         let equipped_id = match slot {
             EquipmentSlot::MainHand => self.equipped_main_hand.as_deref(),
             EquipmentSlot::OffHand => self.equipped_off_hand.as_deref(),
+            EquipmentSlot::Head => self.equipped_head.as_deref(),
+            EquipmentSlot::Body => self.equipped_body.as_deref(),
+            EquipmentSlot::Hands => self.equipped_hands.as_deref(),
+            EquipmentSlot::Feet => self.equipped_feet.as_deref(),
         }?;
 
         EquipmentItem::get_by_id(equipped_id)
@@ -220,15 +284,40 @@ impl Player {
             return false;
         }
 
+        if slot == EquipmentSlot::OffHand && item.is_two_handed_weapon() {
+            return false;
+        }
+
+        if slot == EquipmentSlot::OffHand {
+            if let Some(main_hand_id) = self.equipped_main_hand.as_deref() {
+                if let Some(main_hand_item) = EquipmentItem::get_by_id(main_hand_id) {
+                    if main_hand_item.is_two_handed_weapon() {
+                        return false;
+                    }
+                }
+            }
+        }
+
         let Some(inventory_idx) = self.equipment_inventory.iter().position(|id| id == item_id)
         else {
             return false;
         };
 
         self.equipment_inventory.remove(inventory_idx);
+
+        if slot == EquipmentSlot::MainHand && item.is_two_handed_weapon() {
+            if let Some(off_hand_id) = self.equipped_off_hand.take() {
+                self.equipment_inventory.push(off_hand_id);
+            }
+        }
+
         let replaced = match slot {
             EquipmentSlot::MainHand => self.equipped_main_hand.replace(item_id.to_string()),
             EquipmentSlot::OffHand => self.equipped_off_hand.replace(item_id.to_string()),
+            EquipmentSlot::Head => self.equipped_head.replace(item_id.to_string()),
+            EquipmentSlot::Body => self.equipped_body.replace(item_id.to_string()),
+            EquipmentSlot::Hands => self.equipped_hands.replace(item_id.to_string()),
+            EquipmentSlot::Feet => self.equipped_feet.replace(item_id.to_string()),
         };
         if let Some(item_id) = replaced {
             self.equipment_inventory.push(item_id);
@@ -240,6 +329,10 @@ impl Player {
         let equipped = match slot {
             EquipmentSlot::MainHand => self.equipped_main_hand.take(),
             EquipmentSlot::OffHand => self.equipped_off_hand.take(),
+            EquipmentSlot::Head => self.equipped_head.take(),
+            EquipmentSlot::Body => self.equipped_body.take(),
+            EquipmentSlot::Hands => self.equipped_hands.take(),
+            EquipmentSlot::Feet => self.equipped_feet.take(),
         };
 
         if let Some(item_id) = equipped {
@@ -277,8 +370,29 @@ impl Player {
             .equipped_item(EquipmentSlot::OffHand)
             .map(|item| item.weight)
             .unwrap_or(0);
+        let head_weight = self
+            .equipped_item(EquipmentSlot::Head)
+            .map(|item| item.weight)
+            .unwrap_or(0);
+        let body_weight = self
+            .equipped_item(EquipmentSlot::Body)
+            .map(|item| item.weight)
+            .unwrap_or(0);
+        let hands_weight = self
+            .equipped_item(EquipmentSlot::Hands)
+            .map(|item| item.weight)
+            .unwrap_or(0);
+        let feet_weight = self
+            .equipped_item(EquipmentSlot::Feet)
+            .map(|item| item.weight)
+            .unwrap_or(0);
 
-        main_weight.saturating_add(off_weight)
+        main_weight
+            .saturating_add(off_weight)
+            .saturating_add(head_weight)
+            .saturating_add(body_weight)
+            .saturating_add(hands_weight)
+            .saturating_add(feet_weight)
     }
 }
 
@@ -313,8 +427,13 @@ mod tests {
         assert_eq!(player.health_potion_uses, 0);
         assert_eq!(player.health_potion_capacity, 5);
         assert!(player.equipment_inventory.is_empty());
+        assert!(player.item_inventory.is_empty());
         assert!(player.equipped_main_hand.is_none());
         assert!(player.equipped_off_hand.is_none());
+        assert!(player.equipped_head.is_none());
+        assert!(player.equipped_body.is_none());
+        assert!(player.equipped_hands.is_none());
+        assert!(player.equipped_feet.is_none());
     }
 
     #[test]
@@ -541,5 +660,50 @@ mod tests {
         assert!(player.equip_item_to_slot("split_hilt_blade", EquipmentSlot::OffHand));
 
         assert_eq!(player.total_equipment_weight(), 2);
+    }
+
+    #[test]
+    fn add_item_adds_to_item_inventory() {
+        let mut player = Player::default();
+        player.add_item("fruit_of_assassination");
+        assert_eq!(player.item_inventory, vec!["fruit_of_assassination"]);
+    }
+
+    #[test]
+    fn list_item_inventory_items_returns_registered_items() {
+        let mut player = Player::default();
+        player.add_item("fruit_of_assassination");
+        let items = player.list_item_inventory_items();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "fruit_of_assassination");
+    }
+
+    #[test]
+    fn eating_fruit_item_adds_action_and_removes_from_item_inventory() {
+        let mut player = Player::default();
+        player.add_item("fruit_of_assassination");
+        let ate = player.eat_item_inventory_fruit("fruit_of_assassination");
+        assert!(ate);
+        assert!(player.item_inventory.is_empty());
+        assert!(player.has_eaten_fruit("fruit_of_assassination"));
+        assert!(player.has_action("assassination"));
+    }
+
+    #[test]
+    fn two_handed_weapon_cannot_equip_to_off_hand() {
+        let mut player = Player::default();
+        player.add_equipment_item("dull_claymore");
+        assert!(!player.equip_item_to_slot("dull_claymore", EquipmentSlot::OffHand));
+        assert!(player.equipped_off_hand.is_none());
+    }
+
+    #[test]
+    fn two_handed_main_hand_blocks_off_hand_equips() {
+        let mut player = Player::default();
+        player.add_equipment_item("dull_claymore");
+        player.add_equipment_item("split_hilt_blade");
+        assert!(player.equip_item_to_slot("dull_claymore", EquipmentSlot::MainHand));
+        assert!(!player.equip_item_to_slot("split_hilt_blade", EquipmentSlot::OffHand));
+        assert!(player.equipped_off_hand.is_none());
     }
 }

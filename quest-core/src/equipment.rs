@@ -2,16 +2,23 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::item::{ItemCategory, ItemType, ITEM_REGISTRY};
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum EquipmentSlot {
     MainHand,
     OffHand,
+    Head,
+    Body,
+    Hands,
+    Feet,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EquipmentSection {
     Weapon,
+    Armor,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -20,6 +27,7 @@ pub struct EquipmentItem {
     pub name: String,
     pub description: String,
     pub weight: u32,
+    pub item_type: ItemType,
     pub min_damage: u32,
     pub max_damage: u32,
     pub slots: Vec<EquipmentSlot>,
@@ -27,57 +35,61 @@ pub struct EquipmentItem {
     pub drop_source: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct EquipmentData {
-    #[serde(default)]
-    weapon: Vec<WeaponData>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct WeaponData {
-    id: String,
-    name: String,
-    description: String,
-    weight: u32,
-    min_damage: u32,
-    max_damage: u32,
-    slots: Vec<EquipmentSlot>,
-    drop_source: String,
-}
-
 pub static EQUIPMENT_REGISTRY: Lazy<HashMap<String, EquipmentItem>> = Lazy::new(|| {
-    let json_data = include_str!("../data/equipment.json");
-    let parsed: EquipmentData =
-        serde_json::from_str(json_data).expect("Failed to parse equipment.json");
-
     let mut registry = HashMap::new();
 
-    for weapon in parsed.weapon {
-        assert!(
-            weapon.min_damage <= weapon.max_damage,
-            "Invalid damage range for equipment item {}",
-            weapon.id
-        );
+    for item in ITEM_REGISTRY.values() {
+        if item.category != ItemCategory::Equipment {
+            continue;
+        }
 
-        let id = weapon.id.clone();
-        let item = EquipmentItem {
-            id: weapon.id,
-            name: weapon.name,
-            description: weapon.description,
-            weight: weapon.weight,
-            min_damage: weapon.min_damage,
-            max_damage: weapon.max_damage,
-            slots: weapon.slots,
-            section: EquipmentSection::Weapon,
-            drop_source: weapon.drop_source,
+        let slots = parse_slots(&item.slots, &item.id);
+        let (min_damage, max_damage) = item.damage_range().unwrap_or((0, 0));
+        let section = if item.is_weapon() {
+            EquipmentSection::Weapon
+        } else {
+            EquipmentSection::Armor
         };
 
-        let prev = registry.insert(id.clone(), item);
-        assert!(prev.is_none(), "Duplicate equipment id found: {}", id);
+        let equipment_item = EquipmentItem {
+            id: item.id.clone(),
+            name: item.name.clone(),
+            description: item.description.clone(),
+            weight: item.weight,
+            item_type: item.item_type,
+            min_damage,
+            max_damage,
+            slots,
+            section,
+            drop_source: item.drop_source.clone().unwrap_or_default(),
+        };
+
+        let item_id = equipment_item.id.clone();
+        let prev = registry.insert(item_id.clone(), equipment_item);
+        assert!(prev.is_none(), "Duplicate equipment id found: {}", item_id);
     }
 
     registry
 });
+
+fn parse_slots(slots: &[String], item_id: &str) -> Vec<EquipmentSlot> {
+    let mut parsed = Vec::with_capacity(slots.len());
+
+    for slot in slots {
+        let mapped = match slot.as_str() {
+            "main_hand" => EquipmentSlot::MainHand,
+            "off_hand" => EquipmentSlot::OffHand,
+            "head" => EquipmentSlot::Head,
+            "body" => EquipmentSlot::Body,
+            "hands" => EquipmentSlot::Hands,
+            "feet" => EquipmentSlot::Feet,
+            other => panic!("Unknown equipment slot '{other}' for item {item_id}"),
+        };
+        parsed.push(mapped);
+    }
+
+    parsed
+}
 
 impl EquipmentItem {
     pub fn get_by_id(id: &str) -> Option<Self> {
@@ -105,6 +117,10 @@ impl EquipmentItem {
 
     pub fn damage_range(&self) -> (u32, u32) {
         (self.min_damage, self.max_damage)
+    }
+
+    pub fn is_two_handed_weapon(&self) -> bool {
+        self.item_type == ItemType::TwoHandedSword
     }
 }
 
@@ -142,5 +158,12 @@ mod tests {
         let blade = EquipmentItem::get_by_id("split_hilt_blade").unwrap();
         assert!(blade.can_equip_in(EquipmentSlot::MainHand));
         assert!(blade.can_equip_in(EquipmentSlot::OffHand));
+    }
+
+    #[test]
+    fn armor_item_has_armor_slot() {
+        let helm = EquipmentItem::get_by_id("battered_helm").unwrap();
+        assert!(helm.can_equip_in(EquipmentSlot::Head));
+        assert_eq!(helm.section, EquipmentSection::Armor);
     }
 }

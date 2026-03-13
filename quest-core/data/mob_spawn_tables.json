@@ -1,0 +1,29 @@
+[
+    {
+        "id": "dying_forest_mobs",
+        "mobs": [
+            {
+                "id": "mugger",
+                "weight": 60
+            },
+            {
+                "id": "poacher",
+                "weight": 30
+            },
+            {
+                "id": "hungry_wolf",
+                "weight": 10
+            }
+        ],
+        "bosses": [
+            {
+                "id": "old_miller",
+                "weight": 80
+            },
+            {
+                "id": "alpha_wolf",
+                "weight": 20
+            }
+        ]
+    }
+]

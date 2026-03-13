@@ -1,15 +1,28 @@
 use serde::{Deserialize, Serialize};
 
 use crate::area::Area;
+use crate::equipment::EquipmentItem;
 use crate::equipment::EquipmentSlot;
+use crate::item::Item;
+use crate::item_spawn_table::ItemSpawnTable;
 use crate::mob::Mob;
+use crate::mob_spawn_table::MobSpawnTable;
 use crate::player::Player;
 use crate::rng::{RngManager, RngSnapshot};
+use rand::Rng;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExecutedPlayerAction {
     Attack,
+    Assassination,
     HealthPotion { healed: u32 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpawnRarity {
+    Common,
+    Uncommon,
+    Rare,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,13 +50,85 @@ pub struct GameState {
     pub action_counter: u32,
     #[serde(default)]
     pub portals_unlocked: bool,
+    #[serde(default, skip)]
+    pub recent_item_drop_ids: Vec<String>,
     pub version: u32,
 }
 
 pub const SAVE_VERSION: u32 = 3;
 
 impl GameState {
-    fn next_standard_mob_for_area(area: &Area, encounter_index: u32) -> Option<Mob> {
+    fn is_tutorial_area(area: &Area) -> bool {
+        matches!(area.id.as_str(), "the_beach" | "the_fringe")
+    }
+
+    fn spawn_rarity(weight: u32, max_weight: u32) -> SpawnRarity {
+        if max_weight == 0 {
+            return SpawnRarity::Common;
+        }
+
+        let ratio = weight as f64 / max_weight as f64;
+        if ratio >= 0.75 {
+            SpawnRarity::Common
+        } else if ratio >= 0.40 {
+            SpawnRarity::Uncommon
+        } else {
+            SpawnRarity::Rare
+        }
+    }
+
+    fn drop_count_range(rarity: SpawnRarity, is_boss: bool) -> (u32, u32) {
+        match (is_boss, rarity) {
+            (false, SpawnRarity::Common) => (1, 2),
+            (false, SpawnRarity::Uncommon) => (1, 3),
+            (false, SpawnRarity::Rare) => (2, 3),
+            (true, SpawnRarity::Common) => (2, 4),
+            (true, SpawnRarity::Uncommon) => (3, 5),
+            (true, SpawnRarity::Rare) => (4, 7),
+        }
+    }
+
+    fn weighted_mob_id(area: &Area, rng: Option<&mut RngManager>) -> Option<String> {
+        let table_id = area.mob_spawn_table_id.as_deref()?;
+        let table = MobSpawnTable::get_by_id(table_id)?;
+        if let Some(rng_manager) = rng {
+            let roll_rng = rng_manager.get("mob_spawns");
+            table.roll_mob_id(roll_rng)
+        } else {
+            table
+                .mobs
+                .iter()
+                .max_by_key(|entry| entry.weight)
+                .map(|entry| entry.id.clone())
+        }
+    }
+
+    fn weighted_boss_id(area: &Area, rng: Option<&mut RngManager>) -> Option<String> {
+        let table_id = area.mob_spawn_table_id.as_deref()?;
+        let table = MobSpawnTable::get_by_id(table_id)?;
+        if let Some(rng_manager) = rng {
+            let roll_rng = rng_manager.get("mob_spawns");
+            table.roll_boss_id(roll_rng)
+        } else {
+            table
+                .bosses
+                .iter()
+                .max_by_key(|entry| entry.weight)
+                .map(|entry| entry.id.clone())
+        }
+    }
+
+    fn next_standard_mob_for_area(
+        area: &Area,
+        encounter_index: u32,
+        rng: Option<&mut RngManager>,
+    ) -> Option<Mob> {
+        if !Self::is_tutorial_area(area) {
+            if let Some(weighted_id) = Self::weighted_mob_id(area, rng) {
+                return Mob::get_by_id(&weighted_id);
+            }
+        }
+
         if area.mobs.is_empty() {
             return Mob::get_by_id("rat");
         }
@@ -57,7 +142,7 @@ impl GameState {
         let current_area = Area::starting_area();
         let state = Self {
             player: Player::default(),
-            current_mob: Self::next_standard_mob_for_area(&current_area, 0),
+            current_mob: Self::next_standard_mob_for_area(&current_area, 0, None),
             current_area,
             encounters_cleared: 0,
             rng_snapshot: rng_manager.snapshot(),
@@ -71,6 +156,7 @@ impl GameState {
             split_hilt_scene_seen: false,
             action_counter: 0,
             portals_unlocked: false,
+            recent_item_drop_ids: Vec::new(),
             version: SAVE_VERSION,
         };
         (state, rng_manager)
@@ -112,6 +198,87 @@ impl GameState {
         self.rng_snapshot = rng.snapshot();
     }
 
+    pub fn take_recent_item_drop_ids(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.recent_item_drop_ids)
+    }
+
+    fn current_spawn_weight_info(&self) -> Option<(u32, u32)> {
+        let table_id = self.current_area.mob_spawn_table_id.as_deref()?;
+        let table = MobSpawnTable::get_by_id(table_id)?;
+        let mob_id = self.current_mob.as_ref()?.id.as_str();
+
+        if self.is_boss_encounter {
+            Some((table.boss_weight(mob_id)?, table.max_boss_weight()?))
+        } else {
+            Some((table.mob_weight(mob_id)?, table.max_mob_weight()?))
+        }
+    }
+
+    fn roll_item_drops_for_current_mob(&mut self, rng: Option<&mut RngManager>) -> Vec<String> {
+        if Self::is_tutorial_area(&self.current_area) {
+            return Vec::new();
+        }
+
+        let Some(rng_manager) = rng else {
+            return Vec::new();
+        };
+        let Some(table_id) = self.current_area.item_spawn_table_id.as_deref() else {
+            return Vec::new();
+        };
+        let Some(item_table) = ItemSpawnTable::get_by_id(table_id) else {
+            return Vec::new();
+        };
+
+        let (weight, max_weight) = self.current_spawn_weight_info().unwrap_or((1, 1));
+        let rarity = Self::spawn_rarity(weight, max_weight);
+
+        let rarity_bonus = if max_weight == 0 {
+            0
+        } else {
+            (max_weight.saturating_sub(weight) * 20) / max_weight
+        };
+        let boss_bonus = if self.is_boss_encounter { 20 } else { 0 };
+        let adjusted_drop_chance = (item_table.base_drop_chance_percent as u32)
+            .saturating_add(rarity_bonus)
+            .saturating_add(boss_bonus)
+            .min(95);
+
+        let should_drop = {
+            let roll_rng = rng_manager.get("loot");
+            let roll = roll_rng.gen_range(1..=100);
+            roll <= adjusted_drop_chance
+        };
+
+        if !should_drop {
+            self.sync_rng(rng_manager);
+            return Vec::new();
+        }
+
+        let (min_items, max_items) = Self::drop_count_range(rarity, self.is_boss_encounter);
+        let item_count = rng_manager.gen_range("loot", min_items, max_items);
+        let mut dropped_ids = Vec::with_capacity(item_count as usize);
+
+        for _ in 0..item_count {
+            let maybe_item_id = {
+                let roll_rng = rng_manager.get("loot");
+                item_table.pick_item_id(roll_rng).map(|id| id.to_string())
+            };
+            if let Some(item_id) = maybe_item_id {
+                if let Some(item) = Item::get_by_id(&item_id) {
+                    if EquipmentItem::get_by_id(&item.id).is_some() {
+                        self.player.add_equipment_item(&item.id);
+                    } else {
+                        self.player.add_item(&item.id);
+                    }
+                    dropped_ids.push(item.id);
+                }
+            }
+        }
+
+        self.sync_rng(rng_manager);
+        dropped_ids
+    }
+
     fn execute_attack_with_damage(&mut self, damage: u32) -> bool {
         if let Some(mob) = self.current_mob.as_mut() {
             let was_alive = !mob.is_dead();
@@ -123,6 +290,34 @@ impl GameState {
         } else {
             false
         }
+    }
+
+    fn can_execute_assassination(&self) -> bool {
+        if !self.player.has_eaten_fruit("fruit_of_assassination") {
+            return false;
+        }
+        let Some(mob) = self.current_mob.as_ref() else {
+            return false;
+        };
+        if mob.is_dead() || mob.max_health == 0 {
+            return false;
+        }
+
+        let threshold_hp = ((mob.max_health as f64) * 0.35).ceil() as u32;
+        mob.health <= threshold_hp.max(1)
+    }
+
+    fn execute_assassination(&mut self) -> bool {
+        if !self.can_execute_assassination() {
+            return false;
+        }
+
+        let kill_damage = self.current_mob.as_ref().map(|mob| mob.health).unwrap_or(0);
+        if kill_damage == 0 {
+            return false;
+        }
+
+        self.execute_attack_with_damage(kill_damage)
     }
 
     pub fn execute_attack(&mut self) -> bool {
@@ -166,6 +361,12 @@ impl GameState {
                         return Some(ExecutedPlayerAction::Attack);
                     }
                 }
+                "assassination" => {
+                    if self.execute_assassination() {
+                        self.action_counter = next_action_number;
+                        return Some(ExecutedPlayerAction::Assassination);
+                    }
+                }
                 _ => {}
             }
         }
@@ -204,6 +405,12 @@ impl GameState {
                         return Some(ExecutedPlayerAction::Attack);
                     }
                 }
+                "assassination" => {
+                    if self.execute_assassination() {
+                        self.action_counter = next_action_number;
+                        return Some(ExecutedPlayerAction::Assassination);
+                    }
+                }
                 _ => {}
             }
         }
@@ -236,8 +443,20 @@ impl GameState {
     }
 
     pub fn advance_encounter(&mut self) -> bool {
+        self.advance_encounter_internal(None)
+    }
+
+    pub fn advance_encounter_with_rng(&mut self, rng: &mut RngManager) -> bool {
+        self.advance_encounter_internal(Some(rng))
+    }
+
+    fn advance_encounter_internal(&mut self, mut rng: Option<&mut RngManager>) -> bool {
+        self.recent_item_drop_ids.clear();
         if let Some(mob) = &self.current_mob {
             if mob.is_dead() {
+                self.recent_item_drop_ids =
+                    self.roll_item_drops_for_current_mob(rng.as_deref_mut());
+
                 if self.is_boss_encounter {
                     self.handle_boss_defeat();
                     self.current_mob = None;
@@ -248,10 +467,15 @@ impl GameState {
                         self.current_mob = Self::next_standard_mob_for_area(
                             &self.current_area,
                             self.encounters_cleared,
+                            rng.as_deref_mut(),
                         );
                     } else {
                         self.current_mob = None;
                     }
+                }
+
+                if let Some(rng_manager) = rng.as_deref_mut() {
+                    self.sync_rng(rng_manager);
                 }
                 return true;
             }
@@ -309,6 +533,10 @@ impl GameState {
         self.fruit_scene_active = false;
     }
 
+    pub fn consume_inventory_fruit(&mut self, item_id: &str) -> bool {
+        self.player.eat_item_inventory_fruit(item_id)
+    }
+
     pub fn complete_equipment_scene(&mut self) {
         if !self.equipment_scene_active {
             return;
@@ -336,12 +564,25 @@ impl GameState {
     }
 
     pub fn enter_area(&mut self, area_id: &str) -> bool {
+        self.enter_area_internal(area_id, None)
+    }
+
+    pub fn enter_area_with_rng(&mut self, area_id: &str, rng: &mut RngManager) -> bool {
+        self.enter_area_internal(area_id, Some(rng))
+    }
+
+    fn enter_area_internal(&mut self, area_id: &str, mut rng: Option<&mut RngManager>) -> bool {
         if let Some(area) = Area::get_by_id(area_id) {
             self.current_area = area;
             self.encounters_cleared = 0;
-            self.current_mob = Self::next_standard_mob_for_area(&self.current_area, 0);
+            self.current_mob =
+                Self::next_standard_mob_for_area(&self.current_area, 0, rng.as_deref_mut());
             self.is_boss_encounter = false;
             self.in_town = false;
+            self.recent_item_drop_ids.clear();
+            if let Some(rng_manager) = rng.as_deref_mut() {
+                self.sync_rng(rng_manager);
+            }
             true
         } else {
             false
@@ -353,15 +594,25 @@ impl GameState {
             return false;
         }
 
-        if self.current_area.bosses.is_empty() {
+        if self.current_area.bosses.is_empty() && self.current_area.mob_spawn_table_id.is_none() {
             return false;
         }
 
-        let max_idx = self.current_area.bosses.len() as u32 - 1;
-        let boss_idx = rng.gen_range("mob_spawns", 0, max_idx) as usize;
-        let boss_id = &self.current_area.bosses[boss_idx];
+        let boss_id = if Self::is_tutorial_area(&self.current_area) {
+            let max_idx = self.current_area.bosses.len() as u32 - 1;
+            let boss_idx = rng.gen_range("mob_spawns", 0, max_idx) as usize;
+            self.current_area.bosses[boss_idx].clone()
+        } else if let Some(weighted_id) = Self::weighted_boss_id(&self.current_area, Some(rng)) {
+            weighted_id
+        } else if !self.current_area.bosses.is_empty() {
+            let max_idx = self.current_area.bosses.len() as u32 - 1;
+            let boss_idx = rng.gen_range("mob_spawns", 0, max_idx) as usize;
+            self.current_area.bosses[boss_idx].clone()
+        } else {
+            return false;
+        };
 
-        if let Some(boss_mob) = Mob::get_by_id(boss_id) {
+        if let Some(boss_mob) = Mob::get_by_id(&boss_id) {
             self.current_mob = Some(boss_mob);
             self.is_boss_encounter = true;
             self.sync_rng(rng);
@@ -376,6 +627,7 @@ impl GameState {
 mod tests {
     use super::*;
     use crate::action::{Action, ActionCondition, ActionTrigger};
+    use crate::item::Item;
 
     #[test]
     fn new_game_creates_valid_state() {
@@ -391,6 +643,7 @@ mod tests {
         assert!(!state.split_hilt_scene_seen);
         assert_eq!(state.action_counter, 0);
         assert!(!state.portals_unlocked);
+        assert!(state.recent_item_drop_ids.is_empty());
     }
 
     #[test]
@@ -710,6 +963,19 @@ mod tests {
     }
 
     #[test]
+    fn enter_area_with_rng_supports_weighted_spawn_tables() {
+        let (mut state, mut rng) = GameState::new_game();
+        let success = state.enter_area_with_rng("dying_forest", &mut rng);
+
+        assert!(success);
+        let mob_id = state.current_mob.as_ref().map(|mob| mob.id.as_str());
+        assert!(matches!(
+            mob_id,
+            Some("mugger") | Some("poacher") | Some("hungry_wolf")
+        ));
+    }
+
+    #[test]
     fn enter_area_fails_for_invalid_id() {
         let (mut state, _) = GameState::new_game();
         let success = state.enter_area("nonexistent_area");
@@ -835,6 +1101,76 @@ mod tests {
     }
 
     #[test]
+    fn dying_forest_boss_portal_uses_weighted_boss_table() {
+        let (mut state, mut rng) = GameState::new_game();
+        assert!(state.enter_area_with_rng("dying_forest", &mut rng));
+        state.encounters_cleared = state.current_area.base_encounter_amount;
+
+        let success = state.enter_boss_portal(&mut rng);
+        assert!(success);
+        assert!(state.is_boss_encounter);
+        let boss_id = state.current_mob.as_ref().map(|mob| mob.id.as_str());
+        assert!(matches!(boss_id, Some("old_miller") | Some("alpha_wolf")));
+    }
+
+    #[test]
+    fn drop_count_ranges_match_requested_rarity_rules() {
+        assert_eq!(
+            GameState::drop_count_range(SpawnRarity::Common, false),
+            (1, 2)
+        );
+        assert_eq!(
+            GameState::drop_count_range(SpawnRarity::Uncommon, false),
+            (1, 3)
+        );
+        assert_eq!(
+            GameState::drop_count_range(SpawnRarity::Rare, false),
+            (2, 3)
+        );
+        assert_eq!(
+            GameState::drop_count_range(SpawnRarity::Common, true),
+            (2, 4)
+        );
+        assert_eq!(
+            GameState::drop_count_range(SpawnRarity::Uncommon, true),
+            (3, 5)
+        );
+        assert_eq!(GameState::drop_count_range(SpawnRarity::Rare, true), (4, 7));
+    }
+
+    #[test]
+    fn rare_boss_drop_rolls_record_recent_item_ids() {
+        let (mut state, mut rng) = GameState::new_game();
+        assert!(state.enter_area_with_rng("dying_forest", &mut rng));
+
+        let mut found_drops = false;
+
+        for _ in 0..20 {
+            state.current_mob = Mob::get_by_id("alpha_wolf");
+            state.is_boss_encounter = true;
+            if let Some(mob) = state.current_mob.as_mut() {
+                mob.health = 0;
+            }
+
+            state.advance_encounter_with_rng(&mut rng);
+            let dropped = state.take_recent_item_drop_ids();
+            if !dropped.is_empty() {
+                found_drops = true;
+                assert!((4..=7).contains(&dropped.len()));
+                for item_id in &dropped {
+                    assert!(Item::get_by_id(item_id).is_some());
+                }
+                break;
+            }
+        }
+
+        assert!(
+            found_drops,
+            "expected at least one rare boss drop in seeded attempts"
+        );
+    }
+
+    #[test]
     fn advance_encounter_after_standard_mob_does_not_set_in_town() {
         let (mut state, _) = GameState::new_game();
         state.is_boss_encounter = false;
@@ -910,6 +1246,22 @@ mod tests {
             state.current_mob.as_ref().unwrap().health,
             mob_hp_before - 1
         );
+    }
+
+    #[test]
+    fn prioritized_action_returns_assassination_when_execute_triggers() {
+        let (mut state, _) = GameState::new_game();
+        state.player.eat_fruit("fruit_of_instinct");
+        state.player.eat_fruit("fruit_of_assassination");
+        state.current_mob = Mob::get_by_id("rat_lord");
+
+        let mob_max = state.current_mob.as_ref().unwrap().max_health;
+        let threshold_hp = ((mob_max as f64) * 0.35).ceil() as u32;
+        state.current_mob.as_mut().unwrap().health = threshold_hp.max(1);
+
+        let result = state.execute_prioritized_action();
+        assert_eq!(result, Some(ExecutedPlayerAction::Assassination));
+        assert!(state.current_mob.as_ref().unwrap().is_dead());
     }
 
     #[test]
