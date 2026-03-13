@@ -37,9 +37,11 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     let action_progress = use_state(|| 0.0f64);
     let action_progress_ref = use_mut_ref(|| 0.0f64);
     let action_flash = use_state(|| false);
+    let player_timer_running_ref = use_mut_ref(|| false);
     let mob_action_progress = use_state(|| 0.0f64);
     let mob_action_progress_ref = use_mut_ref(|| 0.0f64);
     let mob_action_flash = use_state(|| false);
+    let mob_timer_running_ref = use_mut_ref(|| false);
     let player_hit = use_state(|| false);
     let player_heal = use_state(|| false);
     let level_up_flash = use_state(|| false);
@@ -152,9 +154,11 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         let player_progress_state = action_progress.clone();
         let player_progress_ref = action_progress_ref.clone();
         let player_flash = action_flash.clone();
+        let player_running_ref = player_timer_running_ref.clone();
         let mob_progress_state = mob_action_progress.clone();
         let mob_progress_ref = mob_action_progress_ref.clone();
         let mob_flash = mob_action_flash.clone();
+        let mob_running_ref = mob_timer_running_ref.clone();
 
         use_effect_with(
             (
@@ -179,6 +183,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                 let run_player_timer =
                     *alive && !*portal_transitioning && (*portal_pending || (*auto && *mob_alive));
                 let run_mob_timer = *alive && !*portal_transitioning && *mob_alive;
+                let was_player_timer_running = *player_running_ref.borrow();
+                let was_mob_timer_running = *mob_running_ref.borrow();
 
                 if run_player_timer || run_mob_timer {
                     let tick_ms = 50u32;
@@ -199,15 +205,17 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     let player_action_cb = on_player_action_cb.clone();
                     let mob_attack_cb = on_mob_attack_cb.clone();
 
-                    if run_player_timer {
+                    if run_player_timer && !was_player_timer_running {
                         *player_ref.borrow_mut() = 0.0;
-                    } else {
+                        player_state.set(0.0);
+                    } else if !run_player_timer {
                         *player_ref.borrow_mut() = 0.0;
                         player_state.set(0.0);
                     }
-                    if run_mob_timer {
+                    if run_mob_timer && !was_mob_timer_running {
                         *mob_ref.borrow_mut() = 0.0;
-                    } else {
+                        mob_state.set(0.0);
+                    } else if !run_mob_timer {
                         *mob_ref.borrow_mut() = 0.0;
                         mob_state.set(0.0);
                     }
@@ -276,6 +284,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                         mob_flash.set(false);
                     }
                 }
+                *player_running_ref.borrow_mut() = run_player_timer;
+                *mob_running_ref.borrow_mut() = run_mob_timer;
 
                 move || drop(interval_handle)
             },

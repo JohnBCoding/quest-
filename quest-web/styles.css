@@ -16,8 +16,8 @@
 
     --font-main: 'Press Start 2P', monospace;
     --transition-speed: 400ms;
-    --transition-speed-town-portal-out: 900ms;
-    --transition-speed-town-portal-in: 1700ms;
+    --transition-speed-town-portal-out: 450ms;
+    --transition-speed-town-portal-in: 850ms;
 }
 
 /* --- Reset & Base --- */
@@ -115,7 +115,7 @@ html, body {
 .transition-overlay.transition-town-portal-in::before {
     content: "";
     position: absolute;
-    inset: -35%;
+    inset: -28%;
     border-radius: 50%;
     pointer-events: none;
     background: radial-gradient(
@@ -210,27 +210,27 @@ html, body {
 @keyframes townPortalOutGlow {
     0% {
         opacity: 0;
-        transform: scale(0.72);
+        transform: scale(0.63);
     }
     30% {
         opacity: 0.42;
-        transform: scale(1.15);
+        transform: scale(1);
     }
     58% {
         opacity: 0.7;
-        transform: scale(1.85);
+        transform: scale(1.6);
     }
     75% {
         opacity: 0.28;
-        transform: scale(0.92);
+        transform: scale(0.8);
     }
     88% {
         opacity: 0;
-        transform: scale(0.62);
+        transform: scale(0.54);
     }
     100% {
         opacity: 0;
-        transform: scale(0.62);
+        transform: scale(0.54);
     }
 }
 
@@ -249,35 +249,35 @@ html, body {
 @keyframes townPortalInGlow {
     0% {
         opacity: 0;
-        transform: scale(0.45);
+        transform: scale(0.39);
     }
     26% {
         opacity: 0;
-        transform: scale(0.45);
+        transform: scale(0.39);
     }
     38% {
         opacity: 0.35;
-        transform: scale(1.05);
+        transform: scale(0.91);
     }
     56% {
         opacity: 0.72;
-        transform: scale(2.1);
+        transform: scale(1.82);
     }
     68% {
         opacity: 0.46;
-        transform: scale(1.4);
+        transform: scale(1.22);
     }
     78% {
         opacity: 0.2;
-        transform: scale(0.95);
+        transform: scale(0.83);
     }
     84% {
         opacity: 0;
-        transform: scale(0.7);
+        transform: scale(0.61);
     }
     100% {
         opacity: 0;
-        transform: scale(0.7);
+        transform: scale(0.61);
     }
 }
 
