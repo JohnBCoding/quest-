@@ -23,6 +23,7 @@ pub struct AreaScreenProps {
     pub can_portal_to_town: bool,
     pub is_portal_to_town_pending: bool,
     pub action_progress_reset_event_id: u64,
+    pub is_portal_to_town_transitioning: bool,
     pub last_player_action_kind: Option<PlayerActionKind>,
     pub player_action_event_id: u64,
     pub mob_action_event_id: u64,
@@ -138,6 +139,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         let has_auto = props.has_auto_combat;
         let has_mob = props.current_mob.as_ref().map_or(false, |m| !m.is_dead());
         let player_alive = props.player.is_alive();
+        let is_portal_transitioning = props.is_portal_to_town_transitioning;
         let player_action_speed = props.player.action_speed_ms;
         let mob_action_speed = props
             .current_mob
@@ -158,13 +160,14 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                 has_auto,
                 has_mob,
                 player_alive,
+                is_portal_transitioning,
                 player_action_speed,
                 mob_action_speed,
             ),
-            move |(auto, mob_alive, alive, player_speed, mob_speed)| {
+            move |(auto, mob_alive, alive, portal_transitioning, player_speed, mob_speed)| {
                 let mut interval_handle: Option<gloo_timers::callback::Interval> = None;
 
-                if *mob_alive && *alive {
+                if *mob_alive && *alive && !*portal_transitioning {
                     let auto_enabled = *auto;
                     let tick_ms = 50u32;
                     let player_speed_ms = if *player_speed == 0 {
@@ -247,6 +250,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     player_progress_state.set(0.0);
                     *mob_progress_ref.borrow_mut() = 0.0;
                     mob_progress_state.set(0.0);
+                    player_flash.set(false);
+                    mob_flash.set(false);
                 }
 
                 move || drop(interval_handle)

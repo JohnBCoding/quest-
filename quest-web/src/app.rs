@@ -62,6 +62,7 @@ pub struct App {
     last_mob_action_event_id: u64,
     pending_portal_to_town: bool,
     action_progress_reset_event_id: u64,
+    is_portal_to_town_transitioning: bool,
 }
 
 pub enum AppMsg {
@@ -144,6 +145,7 @@ impl Component for App {
             last_mob_action_event_id: 0,
             pending_portal_to_town: false,
             action_progress_reset_event_id: 0,
+            is_portal_to_town_transitioning: false,
         }
     }
 
@@ -214,6 +216,7 @@ impl Component for App {
                                 if state.portal_to_town() {
                                     storage::save_game(state);
                                     self.pending_portal_to_town = false;
+                                    self.is_portal_to_town_transitioning = false;
                                     self.screen = Screen::InGame;
                                 }
                             }
@@ -237,6 +240,7 @@ impl Component for App {
             AppMsg::TransitionEnd => {
                 self.transition = TransitionState::None;
                 self.transition_effect = TransitionEffect::Wipe;
+                self.is_portal_to_town_transitioning = false;
                 true
             }
             AppMsg::NewGame => {
@@ -246,6 +250,7 @@ impl Component for App {
                 self.rng_manager = Some(rng);
                 self.pending_portal_to_town = false;
                 self.action_progress_reset_event_id = 0;
+                self.is_portal_to_town_transitioning = false;
                 self.last_player_action_kind = None;
                 self.last_player_action_event_id = 0;
                 self.last_mob_action_event_id = 0;
@@ -259,6 +264,7 @@ impl Component for App {
                     self.rng_manager = Some(rng);
                     self.pending_portal_to_town = false;
                     self.action_progress_reset_event_id = 0;
+                    self.is_portal_to_town_transitioning = false;
                     self.last_player_action_kind = None;
                     self.last_player_action_event_id = 0;
                     self.last_mob_action_event_id = 0;
@@ -274,6 +280,7 @@ impl Component for App {
                 self.rng_manager = None;
                 self.pending_portal_to_town = false;
                 self.action_progress_reset_event_id = 0;
+                self.is_portal_to_town_transitioning = false;
                 self.last_player_action_kind = None;
                 self.last_player_action_event_id = 0;
                 self.last_mob_action_event_id = 0;
@@ -321,15 +328,17 @@ impl Component for App {
                         || !state.portals_unlocked;
                     if self.pending_portal_to_town && should_cancel_portal {
                         self.pending_portal_to_town = false;
+                        self.is_portal_to_town_transitioning = false;
                     }
 
                     if self.pending_portal_to_town {
                         self.pending_portal_to_town = false;
+                        self.is_portal_to_town_transitioning = true;
                         ctx.link().send_message(AppMsg::NavigateWithLogic(
                             Screen::InGame,
                             PostTransitionLogic::PortalToTown,
                         ));
-                        return false;
+                        return true;
                     }
 
                     if let Some(executed) = state.execute_prioritized_action() {
@@ -358,10 +367,14 @@ impl Component for App {
                 false
             }
             AppMsg::MobAttack => {
+                if self.is_portal_to_town_transitioning {
+                    return false;
+                }
                 if let Some(ref mut state) = self.game_state {
                     if state.execute_mob_attack().is_some() {
                         if !state.player.is_alive() {
                             self.pending_portal_to_town = false;
+                            self.is_portal_to_town_transitioning = false;
                         }
                         self.last_mob_action_event_id =
                             self.last_mob_action_event_id.saturating_add(1);
@@ -373,6 +386,7 @@ impl Component for App {
             }
             AppMsg::AdvanceEncounter => {
                 self.pending_portal_to_town = false;
+                self.is_portal_to_town_transitioning = false;
                 let mut needs_wipe = false;
 
                 if let Some(ref mut state) = self.game_state {
@@ -411,6 +425,7 @@ impl Component for App {
             }
             AppMsg::EnterPortal => {
                 self.pending_portal_to_town = false;
+                self.is_portal_to_town_transitioning = false;
                 let mut state_changed = false;
                 if let Some(ref mut state) = self.game_state {
                     if let Some(mut rng) = self.rng_manager.take() {
@@ -521,6 +536,7 @@ impl Component for App {
                                 can_portal_to_town={state.portals_unlocked}
                                 is_portal_to_town_pending={self.pending_portal_to_town}
                                 action_progress_reset_event_id={self.action_progress_reset_event_id}
+                                is_portal_to_town_transitioning={self.is_portal_to_town_transitioning}
                                 last_player_action_kind={self.last_player_action_kind.clone()}
                                 player_action_event_id={self.last_player_action_event_id}
                                 mob_action_event_id={self.last_mob_action_event_id}
