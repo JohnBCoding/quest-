@@ -1214,6 +1214,170 @@ html, body {
     max-width: 280px;
 }
 
+/* === Inventory === */
+.inventory-screen {
+    padding: 0;
+}
+
+.inventory-header {
+    padding: 1.5rem 1.2rem;
+    border-bottom: 3px solid var(--c-blue);
+    background: rgba(80, 140, 215, 0.15);
+}
+
+.inventory-header h1 {
+    font-size: 1.4rem;
+    color: var(--c-gold);
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+}
+
+.inventory-body {
+    flex: 1;
+    padding: 1.5rem 1.2rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+}
+
+.inventory-section h2 {
+    font-size: 1rem;
+    color: var(--c-orange);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.8rem;
+    border-bottom: 2px solid var(--c-blue);
+    padding-bottom: 0.5rem;
+}
+
+.equipped-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.8rem;
+}
+
+.equipped-slot-card,
+.equipment-item-card,
+.consumable-card {
+    border: 2px solid var(--c-purple);
+    background: rgba(85, 65, 95, 0.2);
+    padding: 0.8rem 1rem;
+}
+
+.equipped-slot-card h3 {
+    font-size: 0.8rem;
+    color: var(--c-blue);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.45rem;
+}
+
+.equipment-name {
+    font-size: 0.95rem;
+    color: var(--c-white);
+}
+
+.equipment-meta {
+    font-size: 0.7rem;
+    color: var(--c-green);
+    text-transform: uppercase;
+    margin-top: 0.2rem;
+}
+
+.equipment-description {
+    font-size: 0.72rem;
+    color: var(--c-gray);
+    line-height: 1.7;
+    margin-top: 0.5rem;
+}
+
+.equipment-empty {
+    font-size: 0.8rem;
+    color: var(--c-gray);
+}
+
+.equipment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+.equipment-item-card.empty {
+    border-style: dashed;
+}
+
+.equipment-actions {
+    margin-top: 0.75rem;
+    display: flex;
+    gap: 0.6rem;
+}
+
+.consumables-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.8rem;
+}
+
+.consumable-title {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--c-blue);
+    margin-bottom: 0.35rem;
+}
+
+.consumable-value {
+    font-size: 0.78rem;
+    color: var(--c-white);
+}
+
+.consumable-empty {
+    font-size: 0.75rem;
+    color: var(--c-gray);
+}
+
+.consumable-fruit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.consumable-fruit-row {
+    border-left: 2px solid var(--c-gold);
+    padding-left: 0.5rem;
+}
+
+.consumable-fruit-name {
+    font-size: 0.74rem;
+    color: var(--c-gold);
+}
+
+.consumable-fruit-desc {
+    font-size: 0.68rem;
+    color: var(--c-gray);
+    line-height: 1.6;
+    margin-top: 0.15rem;
+}
+
+.inventory-footer {
+    padding: 1.2rem;
+    border-top: 3px solid var(--c-blue);
+    display: flex;
+    justify-content: center;
+}
+
+.inventory-footer .btn {
+    max-width: 300px;
+}
+
+@media (min-width: 760px) {
+    .equipped-grid,
+    .consumables-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
 /* === Action Speed Bar === */
 .action-speed-bar-container {
     width: 100%;

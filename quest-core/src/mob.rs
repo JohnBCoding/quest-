@@ -13,6 +13,8 @@ pub struct Mob {
     pub base_xp: u64,
     #[serde(default)]
     pub base_damage: u32,
+    #[serde(default)]
+    pub max_damage: u32,
     #[serde(default = "default_action_speed")]
     pub action_speed_ms: u32,
 }
@@ -32,6 +34,8 @@ pub static MOB_REGISTRY: Lazy<HashMap<String, Mob>> = Lazy::new(|| {
         #[serde(default)]
         base_xp: u64,
         base_damage: u32,
+        #[serde(default)]
+        max_damage: u32,
         action_speed_ms: u32,
     }
     let parsed: Vec<MobData> = serde_json::from_str(json_data).expect("Failed to parse mobs.json");
@@ -46,6 +50,7 @@ pub static MOB_REGISTRY: Lazy<HashMap<String, Mob>> = Lazy::new(|| {
                 max_health: data.health, // Initialize max_health to base health
                 base_xp: data.base_xp,
                 base_damage: data.base_damage,
+                max_damage: data.max_damage.max(data.base_damage),
                 action_speed_ms: data.action_speed_ms,
             },
         );
@@ -66,6 +71,7 @@ impl Mob {
         health: u32,
         base_xp: u64,
         base_damage: u32,
+        max_damage: u32,
         action_speed_ms: u32,
     ) -> Self {
         Self {
@@ -75,8 +81,13 @@ impl Mob {
             max_health: health,
             base_xp,
             base_damage,
+            max_damage: max_damage.max(base_damage),
             action_speed_ms,
         }
+    }
+
+    pub fn damage_range(&self) -> (u32, u32) {
+        (self.base_damage, self.max_damage.max(self.base_damage))
     }
 
     /// Reduces the mob's health by the given amount, clamping at 0.
@@ -106,25 +117,27 @@ mod tests {
         assert_eq!(rat.max_health, 2);
         assert!(rat.base_xp > 0);
         assert_eq!(rat.base_damage, 0);
+        assert_eq!(rat.max_damage, 0);
         assert_eq!(rat.action_speed_ms, 2000);
     }
 
     #[test]
     fn mob_creation() {
-        let mob = Mob::new("rat", "Rat", 2, 10, 0, 1000);
+        let mob = Mob::new("rat", "Rat", 2, 10, 0, 0, 1000);
         assert_eq!(mob.id, "rat");
         assert_eq!(mob.name, "Rat");
         assert_eq!(mob.health, 2);
         assert_eq!(mob.max_health, 2);
         assert_eq!(mob.base_xp, 10);
         assert_eq!(mob.base_damage, 0);
+        assert_eq!(mob.max_damage, 0);
         assert_eq!(mob.action_speed_ms, 1000);
         assert!(!mob.is_dead());
     }
 
     #[test]
     fn take_damage() {
-        let mut mob = Mob::new("rat", "Rat", 2, 10, 0, 1000);
+        let mut mob = Mob::new("rat", "Rat", 2, 10, 0, 0, 1000);
         mob.take_damage(1);
         assert_eq!(mob.health, 1);
         assert!(!mob.is_dead());
@@ -132,5 +145,11 @@ mod tests {
         mob.take_damage(2); // Overkill
         assert_eq!(mob.health, 0);
         assert!(mob.is_dead());
+    }
+
+    #[test]
+    fn damage_range_uses_max_at_least_base() {
+        let mob = Mob::new("rat_lord", "Rat Lord", 5, 250, 3, 1, 1000);
+        assert_eq!(mob.damage_range(), (3, 3));
     }
 }

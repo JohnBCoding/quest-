@@ -2,12 +2,15 @@ use yew::prelude::*;
 
 use crate::screens::area::AreaScreen;
 use crate::screens::character_sheet::CharacterSheetScreen;
+use crate::screens::equipment_scene::EquipmentSceneScreen;
 use crate::screens::fruit_scene::FruitSceneScreen;
+use crate::screens::inventory::InventoryScreen;
 use crate::screens::main_menu::MainMenuScreen;
 use crate::screens::town::TownScreen;
 use crate::storage;
 
 use quest_core::action::Action;
+use quest_core::equipment::EquipmentSlot;
 use quest_core::game_state::ExecutedPlayerAction;
 use quest_core::game_state::GameState;
 use quest_core::rng::RngManager;
@@ -17,6 +20,8 @@ pub enum Screen {
     MainMenu,
     InGame,
     FruitScene,
+    EquipmentScene,
+    Inventory,
     CharacterSheet,
 }
 
@@ -37,6 +42,8 @@ pub enum TransitionEffect {
 pub enum PostTransitionLogic {
     AdvanceEncounter,
     EatFruit,
+    CompleteEquipmentScene,
+    CloseInventory,
     CloseCharacterSheet,
     TravelToArea(String),
     PortalToTown,
@@ -81,8 +88,15 @@ pub enum AppMsg {
     AdvanceEncounterIfCurrent(u64),
     EnterPortal,
     EatFruit,
+    EquipSceneItem,
     CloseCharacterSheet,
     OpenCharacterSheet,
+    OpenInventory,
+    CloseInventory,
+    EquipMainHand(String),
+    EquipOffHand(String),
+    UnequipMainHand,
+    UnequipOffHand,
     SaveActionPriority(Vec<Action>),
     TravelToArea(String),
     NavigateWithLogic(Screen, PostTransitionLogic),
@@ -190,17 +204,23 @@ impl Component for App {
                         PostTransitionLogic::AdvanceEncounter => {
                             let mut did_advance = false;
                             let mut fruit_scene_active = false;
+                            let mut equipment_scene_active = false;
                             let mut entered_town = false;
                             if let Some(ref mut state) = self.game_state {
                                 if state.advance_encounter() {
                                     storage::save_game(state);
                                     did_advance = true;
                                     fruit_scene_active = state.fruit_scene_active;
+                                    equipment_scene_active = state.equipment_scene_active;
                                     entered_town = state.in_town;
                                 }
                             }
                             if did_advance {
-                                if fruit_scene_active {
+                                if equipment_scene_active {
+                                    self.invalidate_area_combat_timers();
+                                    self.pending_portal_to_town = false;
+                                    self.screen = Screen::EquipmentScene;
+                                } else if fruit_scene_active {
                                     self.invalidate_area_combat_timers();
                                     self.pending_portal_to_town = false;
                                     self.screen = Screen::FruitScene;
@@ -226,6 +246,26 @@ impl Component for App {
                                 self.pending_portal_to_town = false;
                                 self.screen = Screen::CharacterSheet;
                             }
+                        }
+                        PostTransitionLogic::CompleteEquipmentScene => {
+                            if let Some(ref mut state) = self.game_state {
+                                state.complete_equipment_scene();
+                                storage::save_game(state);
+                            }
+                            self.pending_portal_to_town = false;
+                            self.screen = Screen::Inventory;
+                        }
+                        PostTransitionLogic::CloseInventory => {
+                            let mut entered_town = false;
+                            if let Some(ref mut state) = self.game_state {
+                                entered_town = state.finish_first_inventory_visit();
+                                storage::save_game(state);
+                            }
+                            if entered_town {
+                                self.invalidate_area_combat_timers();
+                                self.pending_portal_to_town = false;
+                            }
+                            self.screen = Screen::InGame;
                         }
                         PostTransitionLogic::CloseCharacterSheet => {
                             if self.from_fruit_scene {
@@ -350,7 +390,14 @@ impl Component for App {
             }
             AppMsg::AttackMob => {
                 if let Some(ref mut state) = self.game_state {
-                    if state.execute_attack() {
+                    let did_attack = if let Some(mut rng) = self.rng_manager.take() {
+                        let attacked = state.execute_attack_with_rng(&mut rng);
+                        self.rng_manager = Some(rng);
+                        attacked
+                    } else {
+                        state.execute_attack()
+                    };
+                    if did_attack {
                         self.last_player_action_kind = Some(PlayerActionKind::Attack);
                         self.last_player_action_event_id =
                             self.last_player_action_event_id.saturating_add(1);
@@ -392,7 +439,15 @@ impl Component for App {
                         return true;
                     }
 
-                    if let Some(executed) = state.execute_prioritized_action() {
+                    let executed = if let Some(mut rng) = self.rng_manager.take() {
+                        let result = state.execute_prioritized_action_with_rng(&mut rng);
+                        self.rng_manager = Some(rng);
+                        result
+                    } else {
+                        state.execute_prioritized_action()
+                    };
+
+                    if let Some(executed) = executed {
                         let is_dead = state.current_mob.as_ref().map_or(false, |m| m.is_dead());
                         self.last_player_action_kind = match executed {
                             ExecutedPlayerAction::Attack => Some(PlayerActionKind::Attack),
@@ -423,7 +478,14 @@ impl Component for App {
                     return false;
                 }
                 if let Some(ref mut state) = self.game_state {
-                    if state.execute_mob_attack().is_some() {
+                    let dealt = if let Some(mut rng) = self.rng_manager.take() {
+                        let result = state.execute_mob_attack_with_rng(&mut rng);
+                        self.rng_manager = Some(rng);
+                        result
+                    } else {
+                        state.execute_mob_attack()
+                    };
+                    if dealt.is_some() {
                         if !state.player.is_alive() {
                             self.pending_portal_to_town = false;
                             self.is_portal_to_town_transitioning = false;
@@ -504,6 +566,13 @@ impl Component for App {
                 ));
                 false
             }
+            AppMsg::EquipSceneItem => {
+                ctx.link().send_message(AppMsg::NavigateWithLogic(
+                    Screen::Inventory,
+                    PostTransitionLogic::CompleteEquipmentScene,
+                ));
+                false
+            }
             AppMsg::CloseCharacterSheet => {
                 ctx.link().send_message(AppMsg::NavigateWithLogic(
                     Screen::InGame,
@@ -514,6 +583,59 @@ impl Component for App {
             AppMsg::OpenCharacterSheet => {
                 ctx.link()
                     .send_message(AppMsg::Navigate(Screen::CharacterSheet));
+                false
+            }
+            AppMsg::OpenInventory => {
+                ctx.link().send_message(AppMsg::Navigate(Screen::Inventory));
+                false
+            }
+            AppMsg::CloseInventory => {
+                ctx.link().send_message(AppMsg::NavigateWithLogic(
+                    Screen::InGame,
+                    PostTransitionLogic::CloseInventory,
+                ));
+                false
+            }
+            AppMsg::EquipMainHand(item_id) => {
+                if let Some(ref mut state) = self.game_state {
+                    if state
+                        .player
+                        .equip_item_to_slot(&item_id, EquipmentSlot::MainHand)
+                    {
+                        storage::save_game(state);
+                        return true;
+                    }
+                }
+                false
+            }
+            AppMsg::EquipOffHand(item_id) => {
+                if let Some(ref mut state) = self.game_state {
+                    if state
+                        .player
+                        .equip_item_to_slot(&item_id, EquipmentSlot::OffHand)
+                    {
+                        storage::save_game(state);
+                        return true;
+                    }
+                }
+                false
+            }
+            AppMsg::UnequipMainHand => {
+                if let Some(ref mut state) = self.game_state {
+                    if state.player.unequip_slot(EquipmentSlot::MainHand) {
+                        storage::save_game(state);
+                        return true;
+                    }
+                }
+                false
+            }
+            AppMsg::UnequipOffHand => {
+                if let Some(ref mut state) = self.game_state {
+                    if state.player.unequip_slot(EquipmentSlot::OffHand) {
+                        storage::save_game(state);
+                        return true;
+                    }
+                }
                 false
             }
             AppMsg::SaveActionPriority(actions) => {
@@ -566,6 +688,7 @@ impl Component for App {
                 if let Some(ref state) = self.game_state {
                     if state.in_town {
                         let on_open_cs = ctx.link().callback(|_| AppMsg::OpenCharacterSheet);
+                        let on_open_inventory = ctx.link().callback(|_| AppMsg::OpenInventory);
                         let on_travel = ctx
                             .link()
                             .callback(|_| AppMsg::TravelToArea("the_fringe".to_string()));
@@ -574,6 +697,7 @@ impl Component for App {
                                 has_auto_combat={state.player.has_auto_combat()}
                                 on_exit={on_exit}
                                 on_open_character_sheet={on_open_cs}
+                                on_open_inventory={on_open_inventory}
                                 on_travel_fringe={on_travel}
                             />
                         }
@@ -614,6 +738,44 @@ impl Component for App {
                         <FruitSceneScreen
                             fruit_id={fruit_id}
                             on_eat_fruit={on_eat}
+                        />
+                    }
+                } else {
+                    html! { <div class="screen">{ "Error: No game state" }</div> }
+                }
+            }
+            Screen::EquipmentScene => {
+                if let Some(ref state) = self.game_state {
+                    let item_id = state.pending_equipment_id.clone().unwrap_or_default();
+                    let on_equip_item = ctx.link().callback(|_| AppMsg::EquipSceneItem);
+                    html! {
+                        <EquipmentSceneScreen
+                            item_id={item_id}
+                            on_equip_item={on_equip_item}
+                        />
+                    }
+                } else {
+                    html! { <div class="screen">{ "Error: No game state" }</div> }
+                }
+            }
+            Screen::Inventory => {
+                if let Some(ref state) = self.game_state {
+                    let on_close = ctx.link().callback(|_| AppMsg::CloseInventory);
+                    let on_equip_main = ctx.link().callback(AppMsg::EquipMainHand);
+                    let on_equip_off = ctx.link().callback(AppMsg::EquipOffHand);
+                    let on_unequip_main = ctx.link().callback(|_| AppMsg::UnequipMainHand);
+                    let on_unequip_off = ctx.link().callback(|_| AppMsg::UnequipOffHand);
+                    html! {
+                        <InventoryScreen
+                            player={state.player.clone()}
+                            equipped_main_hand={state.player.equipped_item(EquipmentSlot::MainHand)}
+                            equipped_off_hand={state.player.equipped_item(EquipmentSlot::OffHand)}
+                            inventory_items={state.player.list_equipment_inventory_items()}
+                            on_equip_main={on_equip_main}
+                            on_equip_off={on_equip_off}
+                            on_unequip_main={on_unequip_main}
+                            on_unequip_off={on_unequip_off}
+                            on_close={on_close}
                         />
                     }
                 } else {

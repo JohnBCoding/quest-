@@ -5,6 +5,7 @@
         "health": 2,
         "base_xp": 100,
         "base_damage": 0,
+        "max_damage": 0,
         "action_speed_ms": 2000
     },
     {
@@ -12,7 +13,8 @@
         "name": "Rat Lord",
         "health": 5,
         "base_xp": 250,
-        "base_damage": 10,
+        "base_damage": 1,
+        "max_damage": 3,
         "action_speed_ms": 2000
     },
     {
@@ -21,6 +23,7 @@
         "health": 4,
         "base_xp": 100,
         "base_damage": 0,
+        "max_damage": 0,
         "action_speed_ms": 1500
     },
     {
@@ -29,6 +32,7 @@
         "health": 5,
         "base_xp": 100,
         "base_damage": 1,
+        "max_damage": 1,
         "action_speed_ms": 1500
     },
     {
@@ -36,7 +40,8 @@
         "name": "Rat Face",
         "health": 10,
         "base_xp": 250,
-        "base_damage": 5,
+        "base_damage": 2,
+        "max_damage": 5,
         "action_speed_ms": 1250
     }
 ]
