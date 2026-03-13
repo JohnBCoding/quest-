@@ -97,7 +97,7 @@ impl App {
     fn transition_in_duration_ms(effect: TransitionEffect) -> u32 {
         match effect {
             TransitionEffect::Wipe => 400,
-            TransitionEffect::TownPortal => 1300,
+            TransitionEffect::TownPortal => 1700,
         }
     }
 

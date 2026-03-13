@@ -139,6 +139,7 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         let has_auto = props.has_auto_combat;
         let has_mob = props.current_mob.as_ref().map_or(false, |m| !m.is_dead());
         let player_alive = props.player.is_alive();
+        let is_portal_pending = props.is_portal_to_town_pending;
         let is_portal_transitioning = props.is_portal_to_town_transitioning;
         let player_action_speed = props.player.action_speed_ms;
         let mob_action_speed = props
@@ -160,15 +161,26 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                 has_auto,
                 has_mob,
                 player_alive,
+                is_portal_pending,
                 is_portal_transitioning,
                 player_action_speed,
                 mob_action_speed,
             ),
-            move |(auto, mob_alive, alive, portal_transitioning, player_speed, mob_speed)| {
+            move |(
+                auto,
+                mob_alive,
+                alive,
+                portal_pending,
+                portal_transitioning,
+                player_speed,
+                mob_speed,
+            )| {
                 let mut interval_handle: Option<gloo_timers::callback::Interval> = None;
+                let run_player_timer =
+                    *alive && !*portal_transitioning && (*portal_pending || (*auto && *mob_alive));
+                let run_mob_timer = *alive && !*portal_transitioning && *mob_alive;
 
-                if *mob_alive && *alive && !*portal_transitioning {
-                    let auto_enabled = *auto;
+                if run_player_timer || run_mob_timer {
                     let tick_ms = 50u32;
                     let player_speed_ms = if *player_speed == 0 {
                         1000
@@ -187,14 +199,24 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     let player_action_cb = on_player_action_cb.clone();
                     let mob_attack_cb = on_mob_attack_cb.clone();
 
-                    *player_ref.borrow_mut() = 0.0;
-                    *mob_ref.borrow_mut() = 0.0;
+                    if run_player_timer {
+                        *player_ref.borrow_mut() = 0.0;
+                    } else {
+                        *player_ref.borrow_mut() = 0.0;
+                        player_state.set(0.0);
+                    }
+                    if run_mob_timer {
+                        *mob_ref.borrow_mut() = 0.0;
+                    } else {
+                        *mob_ref.borrow_mut() = 0.0;
+                        mob_state.set(0.0);
+                    }
 
                     interval_handle =
                         Some(gloo_timers::callback::Interval::new(tick_ms, move || {
                             let mut player_fired_this_tick = false;
 
-                            if auto_enabled {
+                            if run_player_timer {
                                 let mut player_val = player_ref.borrow_mut();
                                 *player_val += player_increment;
                                 if *player_val >= 100.0 {
@@ -211,38 +233,37 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                                 } else {
                                     player_state.set(*player_val);
                                 }
-                            } else {
-                                *player_ref.borrow_mut() = 0.0;
-                                player_state.set(0.0);
                             }
 
-                            let mut mob_val = mob_ref.borrow_mut();
-                            *mob_val += mob_increment;
-                            if *mob_val >= 100.0 {
-                                let delay_ms = if player_fired_this_tick { 450 } else { 0 };
-                                let flash = mob_flash_handle.clone();
-                                let cb = mob_attack_cb.clone();
-                                let execute_mob = move || {
-                                    flash.set(true);
-                                    cb.emit(());
-                                    let flash_reset = flash.clone();
-                                    gloo_timers::callback::Timeout::new(300, move || {
-                                        flash_reset.set(false);
-                                    })
-                                    .forget();
-                                };
-
-                                if delay_ms > 0 {
-                                    gloo_timers::callback::Timeout::new(delay_ms, execute_mob)
+                            if run_mob_timer {
+                                let mut mob_val = mob_ref.borrow_mut();
+                                *mob_val += mob_increment;
+                                if *mob_val >= 100.0 {
+                                    let delay_ms = if player_fired_this_tick { 450 } else { 0 };
+                                    let flash = mob_flash_handle.clone();
+                                    let cb = mob_attack_cb.clone();
+                                    let execute_mob = move || {
+                                        flash.set(true);
+                                        cb.emit(());
+                                        let flash_reset = flash.clone();
+                                        gloo_timers::callback::Timeout::new(300, move || {
+                                            flash_reset.set(false);
+                                        })
                                         .forget();
-                                } else {
-                                    execute_mob();
-                                }
+                                    };
 
-                                *mob_val = 0.0;
-                                mob_state.set(0.0);
-                            } else {
-                                mob_state.set(*mob_val);
+                                    if delay_ms > 0 {
+                                        gloo_timers::callback::Timeout::new(delay_ms, execute_mob)
+                                            .forget();
+                                    } else {
+                                        execute_mob();
+                                    }
+
+                                    *mob_val = 0.0;
+                                    mob_state.set(0.0);
+                                } else {
+                                    mob_state.set(*mob_val);
+                                }
                             }
                         }));
                 } else {
