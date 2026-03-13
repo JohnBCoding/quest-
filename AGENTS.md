@@ -27,3 +27,7 @@ These rules apply to the entire repository tree rooted at this file.
 ## Compliance Rule
 If any instruction in this file conflicts with behavior, enforce this file + FULL global skill literally.
 Default behavior is to halt and request clarification rather than proceed non-compliantly.
+
+## Rust escalation 
+Due to how the Rust environment is setup, you will have to use network access via escalation to do
+certain things like running tests and pushing PRs. You have permission to do this.
