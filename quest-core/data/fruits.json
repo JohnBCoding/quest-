@@ -1,9 +1,0 @@
-[
-    {
-        "id": "fruit_of_instinct",
-        "name": "Fruit of Instinct",
-        "description": "A strange, pulsing fruit. Eating it awakens something primal within you — your body begins to act on its own.",
-        "effect": "unlock_auto_combat",
-        "drop_source": "rat_lord"
-    }
-]

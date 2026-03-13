@@ -41,6 +41,15 @@ impl Action {
         }
     }
 
+    pub fn default_assassination() -> Self {
+        Self {
+            id: "assassination".to_string(),
+            name: "Assassinate".to_string(),
+            trigger: ActionTrigger::EveryAction,
+            condition: ActionCondition::None,
+        }
+    }
+
     pub fn trigger_matches(&self, action_number: u32) -> bool {
         match self.trigger {
             ActionTrigger::EveryAction => true,
@@ -123,6 +132,15 @@ mod tests {
     fn missing_condition_defaults_to_none() {
         let json = r#"{"id":"attack","name":"Attack","trigger":"EveryAction"}"#;
         let action: Action = serde_json::from_str(json).unwrap();
+        assert_eq!(action.condition, ActionCondition::None);
+    }
+
+    #[test]
+    fn default_assassination_has_correct_values() {
+        let action = Action::default_assassination();
+        assert_eq!(action.id, "assassination");
+        assert_eq!(action.name, "Assassinate");
+        assert_eq!(action.trigger, ActionTrigger::EveryAction);
         assert_eq!(action.condition, ActionCondition::None);
     }
 }

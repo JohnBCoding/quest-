@@ -2,6 +2,8 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::item::{ItemCategory, ITEM_REGISTRY};
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Fruit {
     pub id: String,
@@ -12,12 +14,27 @@ pub struct Fruit {
 }
 
 pub static FRUIT_REGISTRY: Lazy<HashMap<String, Fruit>> = Lazy::new(|| {
-    let json_data = include_str!("../data/fruits.json");
-    let fruits: Vec<Fruit> = serde_json::from_str(json_data).expect("Failed to parse fruits.json");
     let mut registry = HashMap::new();
-    for fruit in fruits {
+
+    for item in ITEM_REGISTRY.values() {
+        if item.category != ItemCategory::Fruit {
+            continue;
+        }
+
+        let Some(effect) = item.effect.as_ref() else {
+            continue;
+        };
+
+        let fruit = Fruit {
+            id: item.id.clone(),
+            name: item.name.clone(),
+            description: item.description.clone(),
+            effect: effect.clone(),
+            drop_source: item.drop_source.clone().unwrap_or_default(),
+        };
         registry.insert(fruit.id.clone(), fruit);
     }
+
     registry
 });
 

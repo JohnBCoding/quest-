@@ -1,6 +1,7 @@
 use yew::prelude::*;
 
 use quest_core::action::{Action, ActionCondition, ActionTrigger};
+use quest_core::item::Item;
 use quest_core::player::Player;
 
 #[derive(Properties, PartialEq)]
@@ -263,7 +264,11 @@ pub fn character_sheet_screen(props: &CharacterSheetProps) -> Html {
                                                 html! {
                                                     { for props.player.eaten_fruits.iter().map(|f| {
                                                         let fruit = quest_core::fruit::Fruit::get_by_id(f);
-                                                        let name = fruit.as_ref().map(|fr| fr.name.clone()).unwrap_or_else(|| f.clone());
+                                                        let name = fruit
+                                                            .as_ref()
+                                                            .map(|fr| fr.name.clone())
+                                                            .or_else(|| Item::get_by_id(f).map(|item| item.name))
+                                                            .unwrap_or_else(|| f.clone());
                                                         html! {
                                                             <div class="fruit-badge">
                                                                 <span class="fruit-badge-icon">{"🍎"}</span>

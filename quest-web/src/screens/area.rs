@@ -32,6 +32,8 @@ pub struct AreaScreenProps {
 #[function_component(AreaScreen)]
 pub fn area_screen(props: &AreaScreenProps) -> Html {
     let is_attacking = use_state(|| false);
+    let is_assassinating = use_state(|| false);
+    let delay_death_visual = use_state(|| false);
     let is_spawning = use_state(|| false);
     let is_portal_spawning = use_state(|| false);
     let action_progress = use_state(|| 0.0f64);
@@ -51,6 +53,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     {
         let area_id = props.area.id.clone();
         let is_attacking_state = is_attacking.clone();
+        let is_assassinating_state = is_assassinating.clone();
+        let delay_death_visual_state = delay_death_visual.clone();
         let player_hit_state = player_hit.clone();
         let player_heal_state = player_heal.clone();
         let action_flash_state = action_flash.clone();
@@ -64,6 +68,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
 
         use_effect_with(area_id, move |_| {
             is_attacking_state.set(false);
+            is_assassinating_state.set(false);
+            delay_death_visual_state.set(false);
             player_hit_state.set(false);
             player_heal_state.set(false);
             action_flash_state.set(false);
@@ -117,6 +123,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     // Player action animation trigger from app event stream
     {
         let is_attacking_setter = is_attacking.clone();
+        let is_assassinating_setter = is_assassinating.clone();
+        let delay_death_visual_setter = delay_death_visual.clone();
         let player_heal_setter = player_heal.clone();
         let action_event_id = props.player_action_event_id;
         let action_kind = props.last_player_action_kind.clone();
@@ -129,6 +137,17 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                         let reset = is_attacking_setter.clone();
                         gloo_timers::callback::Timeout::new(400, move || {
                             reset.set(false);
+                        })
+                        .forget();
+                    }
+                    Some(PlayerActionKind::Assassination) => {
+                        is_assassinating_setter.set(true);
+                        delay_death_visual_setter.set(true);
+                        let reset = is_assassinating_setter.clone();
+                        let death_reset = delay_death_visual_setter.clone();
+                        gloo_timers::callback::Timeout::new(650, move || {
+                            reset.set(false);
+                            death_reset.set(false);
                         })
                         .forget();
                     }
@@ -412,13 +431,33 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                 {
                     if let Some(mob) = &props.current_mob {
                         let hit_class = if *is_attacking { "animating-attack" } else { "" };
-                        let dead_class = if mob.is_dead() { "dead" } else { "" };
+                        let execute_class = if *is_assassinating {
+                            "animating-assassination"
+                        } else {
+                            ""
+                        };
+                        let dead_class = if mob.is_dead() && !*delay_death_visual {
+                            "dead"
+                        } else {
+                            ""
+                        };
                         let boss_class = if props.is_boss { "boss-encounter" } else { "" };
                         let spawn_class = if *is_spawning { "spawning-boss" } else { "" };
+                        let assassination_hud_class = if *is_assassinating {
+                            "assassination-hit"
+                        } else {
+                            ""
+                        };
                         let mob_flash_class = if *mob_action_flash { "action-speed-bar-flash" } else { "" };
                         html! {
-                            <div class={classes!("mob-hud", dead_class, boss_class, spawn_class)}>
-                                <div class={classes!("mob-vitals", hit_class)}>
+                            <div class={classes!(
+                                "mob-hud",
+                                dead_class,
+                                boss_class,
+                                spawn_class,
+                                assassination_hud_class
+                            )}>
+                                <div class={classes!("mob-vitals", hit_class, execute_class)}>
                                     <h3>{ &mob.name }</h3>
                                     <HealthBar
                                         current={mob.health}

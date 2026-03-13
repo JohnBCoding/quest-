@@ -1,0 +1,106 @@
+{
+  "equipment": [
+    {
+      "id": "split_hilt_blade",
+      "name": "Split-Hilt Blade",
+      "description": "Watch your fingers-the handle is held on by a prayer and some twine.",
+      "rarity": "common",
+      "item_type": "one_handed_sword",
+      "weight": 1,
+      "slots": ["main_hand", "off_hand"],
+      "min_damage": 1,
+      "max_damage": 4,
+      "drop_source": "rat_face"
+    },
+    {
+      "id": "dull_claymore",
+      "name": "Dull Claymore",
+      "description": "An oversized blade with a chipped edge and heavy swing.",
+      "rarity": "common",
+      "item_type": "two_handed_sword",
+      "weight": 5,
+      "slots": ["main_hand", "off_hand"],
+      "min_damage": 5,
+      "max_damage": 10
+    },
+    {
+      "id": "battered_helm",
+      "name": "Battered Helm",
+      "description": "A dented helmet that still catches the worst of a blow.",
+      "rarity": "common",
+      "item_type": "helmet",
+      "weight": 2,
+      "slots": ["head"]
+    },
+    {
+      "id": "hide_vest",
+      "name": "Hide Vest",
+      "description": "Stitched hide layers hardened by mud and weather.",
+      "rarity": "common",
+      "item_type": "body_armor",
+      "weight": 3,
+      "slots": ["body"]
+    },
+    {
+      "id": "stitched_pelt_grips",
+      "name": "Stitched Pelt Grips",
+      "description": "Rough pelt wraps that keep your grip from slipping.",
+      "rarity": "common",
+      "item_type": "gloves",
+      "weight": 1,
+      "slots": ["hands"]
+    },
+    {
+      "id": "worn_leather_boots",
+      "name": "Worn Leather Boots",
+      "description": "Soft leather boots with soles worn nearly smooth.",
+      "rarity": "common",
+      "item_type": "boots",
+      "weight": 2,
+      "slots": ["feet"]
+    },
+    {
+      "id": "jagged_bone_dirk",
+      "name": "Jagged Bone Dirk",
+      "description": "A short dagger carved from bone and sharpened unevenly.",
+      "rarity": "common",
+      "item_type": "one_handed_dagger",
+      "weight": 1,
+      "slots": ["main_hand", "off_hand"],
+      "min_damage": 1,
+      "max_damage": 3
+    },
+    {
+      "id": "rusted_gladius",
+      "name": "Rusted Gladius",
+      "description": "Corroded steel with a surviving point and edge.",
+      "rarity": "common",
+      "item_type": "one_handed_sword",
+      "weight": 3,
+      "slots": ["main_hand", "off_hand"],
+      "min_damage": 2,
+      "max_damage": 4
+    }
+  ],
+  "fruit": [
+    {
+      "id": "fruit_of_instinct",
+      "name": "Fruit of Instinct",
+      "description": "A strange, pulsing fruit. Eating it awakens something primal within you; your body begins to act on its own.",
+      "rarity": "rare",
+      "item_type": "fruit",
+      "weight": 1,
+      "effect": "unlock_auto_combat",
+      "drop_source": "rat_lord"
+    },
+    {
+      "id": "fruit_of_assassination",
+      "name": "Fruit of Assassination",
+      "description": "Dark flesh and a metallic scent hinting at sudden endings.",
+      "rarity": "rare",
+      "item_type": "fruit",
+      "weight": 1,
+      "effect": "If the target is below 35% hp, perform a killing blow, instantly killing them."
+    }
+  ]
+}
