@@ -5,6 +5,9 @@
         "description": "Waves crash against the sandy shore. The air is thick with salt and mystery. This is where your journey begins.",
         "connected_areas": [],
         "base_encounter_amount": 1,
+        "mobs": [
+            "rat"
+        ],
         "bosses": [
             "rat_lord"
         ]
@@ -15,8 +18,12 @@
         "description": "The edge of the known world. Familiar creatures lurk here, but the air feels different — charged with possibility.",
         "connected_areas": [],
         "base_encounter_amount": 2,
+        "mobs": [
+            "beggar",
+            "mugger"
+        ],
         "bosses": [
-            "rat_lord"
+            "rat_face"
         ]
     }
 ]

@@ -106,7 +106,7 @@ mod tests {
         assert_eq!(rat.max_health, 2);
         assert!(rat.base_xp > 0);
         assert_eq!(rat.base_damage, 0);
-        assert_eq!(rat.action_speed_ms, 1000);
+        assert_eq!(rat.action_speed_ms, 2000);
     }
 
     #[test]

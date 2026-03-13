@@ -34,12 +34,22 @@ pub struct GameState {
 pub const SAVE_VERSION: u32 = 3;
 
 impl GameState {
+    fn next_standard_mob_for_area(area: &Area, encounter_index: u32) -> Option<Mob> {
+        if area.mobs.is_empty() {
+            return Mob::get_by_id("rat");
+        }
+
+        let idx = (encounter_index as usize) % area.mobs.len();
+        Mob::get_by_id(&area.mobs[idx])
+    }
+
     pub fn new_game() -> (Self, RngManager) {
         let rng_manager = RngManager::new();
+        let current_area = Area::starting_area();
         let state = Self {
             player: Player::default(),
-            current_area: Area::starting_area(),
-            current_mob: Mob::get_by_id("rat"),
+            current_mob: Self::next_standard_mob_for_area(&current_area, 0),
+            current_area,
             encounters_cleared: 0,
             rng_snapshot: rng_manager.snapshot(),
             is_boss_encounter: false,
@@ -157,7 +167,10 @@ impl GameState {
                 } else {
                     self.encounters_cleared += 1;
                     if self.encounters_cleared < self.current_area.base_encounter_amount {
-                        self.current_mob = Mob::get_by_id("rat");
+                        self.current_mob = Self::next_standard_mob_for_area(
+                            &self.current_area,
+                            self.encounters_cleared,
+                        );
                     } else {
                         self.current_mob = None;
                     }
@@ -207,7 +220,7 @@ impl GameState {
         if let Some(area) = Area::get_by_id(area_id) {
             self.current_area = area;
             self.encounters_cleared = 0;
-            self.current_mob = Mob::get_by_id("rat");
+            self.current_mob = Self::next_standard_mob_for_area(&self.current_area, 0);
             self.is_boss_encounter = false;
             self.in_town = false;
             true
