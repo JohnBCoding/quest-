@@ -13,6 +13,8 @@ pub struct Area {
     #[serde(default)]
     pub base_encounter_amount: u32,
     #[serde(default)]
+    pub mobs: Vec<String>,
+    #[serde(default)]
     pub bosses: Vec<String>,
 }
 
@@ -34,6 +36,7 @@ impl Area {
         description: &str,
         connected_areas: Vec<String>,
         base_encounter_amount: u32,
+        mobs: Vec<String>,
         bosses: Vec<String>,
     ) -> Self {
         Self {
@@ -42,6 +45,7 @@ impl Area {
             description: description.to_string(),
             connected_areas,
             base_encounter_amount,
+            mobs,
             bosses,
         }
     }
@@ -90,6 +94,7 @@ mod tests {
             "Twisted trees block the sunlight.",
             vec!["the_beach".to_string()],
             15,
+            vec!["bat".to_string()],
             vec!["tree_ent".to_string()],
         );
         assert_eq!(area.id, "dark_forest");
@@ -97,6 +102,7 @@ mod tests {
         assert_eq!(area.description, "Twisted trees block the sunlight.");
         assert_eq!(area.connected_areas, vec!["the_beach"]);
         assert_eq!(area.base_encounter_amount, 15);
+        assert_eq!(area.mobs, vec!["bat"]);
         assert_eq!(area.bosses, vec!["tree_ent"]);
     }
 

@@ -5,7 +5,7 @@
         "health": 2,
         "base_xp": 100,
         "base_damage": 0,
-        "action_speed_ms": 1000
+        "action_speed_ms": 2000
     },
     {
         "id": "rat_lord",
@@ -13,6 +13,30 @@
         "health": 5,
         "base_xp": 250,
         "base_damage": 10,
-        "action_speed_ms": 1000
+        "action_speed_ms": 2000
+    },
+    {
+        "id": "beggar",
+        "name": "Beggar",
+        "health": 4,
+        "base_xp": 100,
+        "base_damage": 0,
+        "action_speed_ms": 1500
+    },
+    {
+        "id": "mugger",
+        "name": "Mugger",
+        "health": 5,
+        "base_xp": 100,
+        "base_damage": 1,
+        "action_speed_ms": 1500
+    },
+    {
+        "id": "rat_face",
+        "name": "Rat Face",
+        "health": 10,
+        "base_xp": 250,
+        "base_damage": 5,
+        "action_speed_ms": 1250
     }
 ]

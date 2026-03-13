@@ -47,6 +47,37 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     let level_up_flash = use_state(|| false);
     let prev_player_level = use_mut_ref(|| props.player.level);
 
+    // Clear combat visuals and progress whenever entering a new area.
+    {
+        let area_id = props.area.id.clone();
+        let is_attacking_state = is_attacking.clone();
+        let player_hit_state = player_hit.clone();
+        let player_heal_state = player_heal.clone();
+        let action_flash_state = action_flash.clone();
+        let mob_flash_state = mob_action_flash.clone();
+        let action_progress_state = action_progress.clone();
+        let action_progress_ref_state = action_progress_ref.clone();
+        let mob_progress_state = mob_action_progress.clone();
+        let mob_progress_ref_state = mob_action_progress_ref.clone();
+        let player_running_ref = player_timer_running_ref.clone();
+        let mob_running_ref = mob_timer_running_ref.clone();
+
+        use_effect_with(area_id, move |_| {
+            is_attacking_state.set(false);
+            player_hit_state.set(false);
+            player_heal_state.set(false);
+            action_flash_state.set(false);
+            mob_flash_state.set(false);
+            *action_progress_ref_state.borrow_mut() = 0.0;
+            action_progress_state.set(0.0);
+            *mob_progress_ref_state.borrow_mut() = 0.0;
+            mob_progress_state.set(0.0);
+            *player_running_ref.borrow_mut() = false;
+            *mob_running_ref.borrow_mut() = false;
+            || ()
+        });
+    }
+
     // Boss spawn animation
     {
         let is_spawning_setter = is_spawning.clone();
