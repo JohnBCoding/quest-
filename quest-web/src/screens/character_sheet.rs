@@ -63,6 +63,8 @@ pub fn character_sheet_screen(props: &CharacterSheetProps) -> Html {
     let is_configuring = use_state(|| false);
     let draft_actions = use_state(|| props.player.actions.clone());
     let dragged_index = use_state(|| None::<usize>);
+    let (attack_min, attack_max) = props.player.attack_damage_range();
+    let total_weight = props.player.total_equipment_weight();
 
     let on_close = {
         let cb = props.on_close.clone();
@@ -240,6 +242,14 @@ pub fn character_sheet_screen(props: &CharacterSheetProps) -> Html {
                                     <div class="stat-row">
                                         <span class="stat-label">{"HP"}</span>
                                         <span class="stat-value">{format!("{}/{}", props.player.health, props.player.max_health)}</span>
+                                    </div>
+                                    <div class="stat-row">
+                                        <span class="stat-label">{"Attack Damage"}</span>
+                                        <span class="stat-value">{format!("{}-{}", attack_min, attack_max)}</span>
+                                    </div>
+                                    <div class="stat-row">
+                                        <span class="stat-label">{"Total Weight"}</span>
+                                        <span class="stat-value">{total_weight}</span>
                                     </div>
                                 </div>
 

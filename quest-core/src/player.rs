@@ -267,6 +267,26 @@ impl Player {
             (None, None) => (default_fist_damage_min(), default_fist_damage_max()),
         }
     }
+
+    pub fn total_equipment_weight(&self) -> u32 {
+        let inventory_weight: u32 = self
+            .list_equipment_inventory_items()
+            .iter()
+            .map(|item| item.weight)
+            .sum();
+        let main_weight = self
+            .equipped_item(EquipmentSlot::MainHand)
+            .map(|item| item.weight)
+            .unwrap_or(0);
+        let off_weight = self
+            .equipped_item(EquipmentSlot::OffHand)
+            .map(|item| item.weight)
+            .unwrap_or(0);
+
+        inventory_weight
+            .saturating_add(main_weight)
+            .saturating_add(off_weight)
+    }
 }
 
 impl Default for Player {
@@ -510,5 +530,23 @@ mod tests {
             vec!["split_hilt_blade".to_string()]
         );
         assert_eq!(player.attack_damage_range(), (1, 2));
+    }
+
+    #[test]
+    fn total_equipment_weight_is_zero_for_empty_inventory() {
+        let player = Player::default();
+        assert_eq!(player.total_equipment_weight(), 0);
+    }
+
+    #[test]
+    fn total_equipment_weight_includes_equipped_and_inventory() {
+        let mut player = Player::default();
+        player.add_equipment_item("split_hilt_blade");
+        player.add_equipment_item("split_hilt_blade");
+        player.add_equipment_item("split_hilt_blade");
+        assert!(player.equip_item_to_slot("split_hilt_blade", EquipmentSlot::MainHand));
+        assert!(player.equip_item_to_slot("split_hilt_blade", EquipmentSlot::OffHand));
+
+        assert_eq!(player.total_equipment_weight(), 3);
     }
 }
