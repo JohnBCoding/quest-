@@ -434,34 +434,22 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     </div>
                     {
                         if props.has_auto_combat {
-                            let flash_class = if *action_flash { "action-speed-bar-flash" } else { "" };
-                            let portal_class = if props.is_portal_to_town_pending {
-                                "action-speed-bar-portal"
+                            if props.is_portal_to_town_pending {
+                                html! {
+                                    <div class="portal-action-speed-bar-container">
+                                        <div class="portal-action-speed-bar-fill" style={format!("width: {}%;", *action_progress)}></div>
+                                        <div class="portal-action-speed-bar-shimmer"></div>
+                                        <div class="portal-action-speed-bar-text">{"Portal"}</div>
+                                    </div>
+                                }
                             } else {
-                                ""
-                            };
-                            let fill_class = if props.is_portal_to_town_pending {
-                                "action-speed-bar-fill-portal"
-                            } else {
-                                ""
-                            };
-                            let action_label = if props.is_portal_to_town_pending {
-                                "Portal"
-                            } else {
-                                "Action"
-                            };
-                            html! {
-                                <div class={classes!("action-speed-bar-container", flash_class, portal_class)}>
-                                    <div class={classes!("action-speed-bar-fill", fill_class)} style={format!("width: {}%;", *action_progress)}></div>
-                                    {
-                                        if props.is_portal_to_town_pending {
-                                            html! { <div class="action-speed-bar-portal-shimmer"></div> }
-                                        } else {
-                                            html! {}
-                                        }
-                                    }
-                                    <div class="action-speed-bar-text">{action_label}</div>
-                                </div>
+                                let flash_class = if *action_flash { "action-speed-bar-flash" } else { "" };
+                                html! {
+                                    <div class={classes!("action-speed-bar-container", flash_class)}>
+                                        <div class="action-speed-bar-fill" style={format!("width: {}%;", *action_progress)}></div>
+                                        <div class="action-speed-bar-text">{"Action"}</div>
+                                    </div>
+                                }
                             }
                         } else {
                             html! {}

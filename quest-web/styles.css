@@ -16,7 +16,7 @@
 
     --font-main: 'Press Start 2P', monospace;
     --transition-speed: 400ms;
-    --transition-speed-town-portal: 520ms;
+    --transition-speed-town-portal: 900ms;
 }
 
 /* --- Reset & Base --- */
@@ -168,38 +168,35 @@ html, body {
         background-image:
             radial-gradient(
                 circle at 50% 50%,
-                rgba(230, 200, 110, 0.2) 0%,
-                rgba(85, 65, 95, 0.1) 28%,
-                rgba(0, 0, 0, 0) 56%,
-                rgba(0, 0, 0, 0.92) 100%
-            ),
-            repeating-linear-gradient(
-                0deg,
-                transparent 0px,
-                transparent 2px,
-                rgba(230, 200, 110, 0.05) 2px,
-                rgba(230, 200, 110, 0.05) 3px
+                rgba(230, 200, 110, 0.18) 0%,
+                rgba(80, 140, 215, 0.12) 18%,
+                rgba(0, 0, 0, 0.2) 42%,
+                rgba(0, 0, 0, 0.95) 100%
             );
     }
-    40% {
-        opacity: 0.8;
+    28% {
+        opacity: 0.6;
         background-image:
             radial-gradient(
                 circle at 50% 50%,
-                rgba(230, 200, 110, 0.18) 0%,
-                rgba(80, 140, 215, 0.12) 26%,
-                rgba(0, 0, 0, 0.72) 58%,
-                rgba(0, 0, 0, 1) 100%
-            ),
-            repeating-linear-gradient(
-                0deg,
-                transparent 0px,
-                transparent 2px,
-                rgba(220, 245, 255, 0.05) 2px,
-                rgba(220, 245, 255, 0.05) 3px
+                rgba(230, 200, 110, 0.16) 0%,
+                rgba(80, 140, 215, 0.1) 12%,
+                rgba(0, 0, 0, 0.48) 30%,
+                rgba(0, 0, 0, 0.98) 100%
             );
     }
-    65% {
+    52% {
+        opacity: 0.9;
+        background-image:
+            radial-gradient(
+                circle at 50% 50%,
+                rgba(230, 200, 110, 0.1) 0%,
+                rgba(80, 140, 215, 0.06) 7%,
+                rgba(0, 0, 0, 0.72) 18%,
+                rgba(0, 0, 0, 1) 100%
+            );
+    }
+    72% {
         opacity: 1;
         background-color: var(--c-bg);
         background-image: none;
@@ -217,27 +214,20 @@ html, body {
         background-color: var(--c-bg);
         background-image: none;
     }
-    25% {
+    32% {
         opacity: 1;
         background-color: var(--c-bg);
         background-image: none;
     }
-    70% {
-        opacity: 0.45;
+    76% {
+        opacity: 0.35;
         background-image:
             radial-gradient(
                 circle at 50% 50%,
-                rgba(230, 200, 110, 0.08) 0%,
-                rgba(80, 140, 215, 0.06) 36%,
-                rgba(0, 0, 0, 0.72) 62%,
+                rgba(230, 200, 110, 0.07) 0%,
+                rgba(80, 140, 215, 0.05) 20%,
+                rgba(0, 0, 0, 0.76) 48%,
                 rgba(0, 0, 0, 0.98) 100%
-            ),
-            repeating-linear-gradient(
-                0deg,
-                transparent 0px,
-                transparent 2px,
-                rgba(220, 245, 255, 0.05) 2px,
-                rgba(220, 245, 255, 0.05) 3px
             );
     }
     100% {
@@ -1212,35 +1202,56 @@ html, body {
     animation: actionFlash 0.3s steps(3, end);
 }
 
-.action-speed-bar-portal {
-    border-color: var(--c-gold);
-    box-shadow: 0 0 8px rgba(230, 200, 110, 0.35);
+.portal-action-speed-bar-container {
+    width: 100%;
+    height: 12px;
+    background: #080808;
+    border: 2px solid var(--c-gold);
+    position: relative;
+    margin-top: 0.3rem;
+    overflow: hidden;
+    box-shadow: 0 0 10px rgba(230, 200, 110, 0.3);
 }
 
-.action-speed-bar-fill-portal {
+.portal-action-speed-bar-fill {
+    height: 100%;
     background: linear-gradient(
         90deg,
-        rgba(85, 65, 95, 0.85),
-        rgba(230, 200, 110, 0.95),
-        rgba(80, 140, 215, 0.9)
+        rgba(85, 65, 95, 0.92),
+        rgba(230, 200, 110, 0.78),
+        rgba(80, 140, 215, 0.82),
+        rgba(85, 65, 95, 0.92)
     );
-    background-size: 200% 100%;
-    animation: portalCharge 1.2s linear infinite;
+    background-size: 240% 100%;
+    transition: width 0.05s linear;
+    animation: portalCharge 1.6s linear infinite;
 }
 
-.action-speed-bar-portal-shimmer {
+.portal-action-speed-bar-shimmer {
     position: absolute;
     inset: 0;
     background: linear-gradient(
         100deg,
         transparent 0%,
-        rgba(230, 200, 110, 0.05) 35%,
-        rgba(220, 245, 255, 0.35) 50%,
-        rgba(230, 200, 110, 0.05) 65%,
+        rgba(230, 200, 110, 0.04) 36%,
+        rgba(220, 245, 255, 0.24) 50%,
+        rgba(230, 200, 110, 0.04) 64%,
         transparent 100%
     );
-    animation: portalBarShimmer 1.5s linear infinite;
+    animation: portalBarShimmer 1.8s linear infinite;
     pointer-events: none;
+}
+
+.portal-action-speed-bar-text {
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    transform: translateY(-50%);
+    font-size: 0.55rem;
+    color: var(--c-gold);
+    text-shadow: 1px 1px 0 #000;
+    pointer-events: none;
+    z-index: 2;
 }
 
 @keyframes actionFlash {
