@@ -60,6 +60,7 @@ pub struct App {
     last_player_action_kind: Option<PlayerActionKind>,
     last_player_action_event_id: u64,
     last_mob_action_event_id: u64,
+    area_combat_timer_epoch: u64,
     pending_portal_to_town: bool,
     action_progress_reset_event_id: u64,
     is_portal_to_town_transitioning: bool,
@@ -77,6 +78,7 @@ pub enum AppMsg {
     QueuePortalToTown,
     MobAttack,
     AdvanceEncounter,
+    AdvanceEncounterIfCurrent(u64),
     EnterPortal,
     EatFruit,
     CloseCharacterSheet,
@@ -131,6 +133,17 @@ impl App {
             _ => TransitionEffect::Wipe,
         }
     }
+
+    fn reset_area_combat_visual_state(&mut self) {
+        self.last_player_action_kind = None;
+        self.last_player_action_event_id = 0;
+        self.last_mob_action_event_id = 0;
+        self.action_progress_reset_event_id = self.action_progress_reset_event_id.saturating_add(1);
+    }
+
+    fn invalidate_area_combat_timers(&mut self) {
+        self.area_combat_timer_epoch = self.area_combat_timer_epoch.saturating_add(1);
+    }
 }
 
 impl Component for App {
@@ -150,6 +163,7 @@ impl Component for App {
             last_player_action_kind: None,
             last_player_action_event_id: 0,
             last_mob_action_event_id: 0,
+            area_combat_timer_epoch: 0,
             pending_portal_to_town: false,
             action_progress_reset_event_id: 0,
             is_portal_to_town_transitioning: false,
@@ -174,25 +188,40 @@ impl Component for App {
                 if let Some(logic) = self.post_transition_logic.take() {
                     match logic {
                         PostTransitionLogic::AdvanceEncounter => {
+                            let mut did_advance = false;
+                            let mut fruit_scene_active = false;
+                            let mut entered_town = false;
                             if let Some(ref mut state) = self.game_state {
                                 if state.advance_encounter() {
                                     storage::save_game(state);
-                                    if state.fruit_scene_active {
+                                    did_advance = true;
+                                    fruit_scene_active = state.fruit_scene_active;
+                                    entered_town = state.in_town;
+                                }
+                            }
+                            if did_advance {
+                                if fruit_scene_active {
+                                    self.invalidate_area_combat_timers();
+                                    self.pending_portal_to_town = false;
+                                    self.screen = Screen::FruitScene;
+                                } else {
+                                    if entered_town {
+                                        self.invalidate_area_combat_timers();
                                         self.pending_portal_to_town = false;
-                                        self.screen = Screen::FruitScene;
-                                    } else {
-                                        if state.in_town {
-                                            self.pending_portal_to_town = false;
-                                        }
-                                        self.screen = Screen::InGame;
                                     }
+                                    self.screen = Screen::InGame;
                                 }
                             }
                         }
                         PostTransitionLogic::EatFruit => {
+                            let mut ate_fruit = false;
                             if let Some(ref mut state) = self.game_state {
                                 state.complete_fruit_scene();
                                 storage::save_game(state);
+                                ate_fruit = true;
+                            }
+                            if ate_fruit {
+                                self.invalidate_area_combat_timers();
                                 self.from_fruit_scene = true;
                                 self.pending_portal_to_town = false;
                                 self.screen = Screen::CharacterSheet;
@@ -205,27 +234,38 @@ impl Component for App {
                                     state.enter_area("the_fringe");
                                     storage::save_game(state);
                                 }
+                                self.reset_area_combat_visual_state();
                             }
                             self.pending_portal_to_town = false;
                             self.screen = Screen::InGame;
                         }
                         PostTransitionLogic::TravelToArea(area_id) => {
+                            let mut entered_area = false;
                             if let Some(ref mut state) = self.game_state {
                                 if state.enter_area(&area_id) {
                                     storage::save_game(state);
-                                    self.pending_portal_to_town = false;
-                                    self.screen = Screen::InGame;
+                                    entered_area = true;
                                 }
+                            }
+                            if entered_area {
+                                self.reset_area_combat_visual_state();
+                                self.pending_portal_to_town = false;
+                                self.screen = Screen::InGame;
                             }
                         }
                         PostTransitionLogic::PortalToTown => {
+                            let mut entered_town = false;
                             if let Some(ref mut state) = self.game_state {
                                 if state.portal_to_town() {
                                     storage::save_game(state);
-                                    self.pending_portal_to_town = false;
-                                    self.is_portal_to_town_transitioning = false;
-                                    self.screen = Screen::InGame;
+                                    entered_town = true;
                                 }
+                            }
+                            if entered_town {
+                                self.invalidate_area_combat_timers();
+                                self.pending_portal_to_town = false;
+                                self.is_portal_to_town_transitioning = false;
+                                self.screen = Screen::InGame;
                             }
                         }
                     }
@@ -261,6 +301,7 @@ impl Component for App {
                 self.last_player_action_kind = None;
                 self.last_player_action_event_id = 0;
                 self.last_mob_action_event_id = 0;
+                self.area_combat_timer_epoch = 0;
                 ctx.link().send_message(AppMsg::Navigate(Screen::InGame));
                 false
             }
@@ -275,11 +316,13 @@ impl Component for App {
                     self.last_player_action_kind = None;
                     self.last_player_action_event_id = 0;
                     self.last_mob_action_event_id = 0;
+                    self.area_combat_timer_epoch = 0;
                     ctx.link().send_message(AppMsg::Navigate(Screen::InGame));
                 }
                 false
             }
             AppMsg::ExitGame => {
+                self.invalidate_area_combat_timers();
                 if let Some(ref state) = self.game_state {
                     storage::save_game(state);
                 }
@@ -315,9 +358,10 @@ impl Component for App {
                         storage::save_game(state);
 
                         if is_dead {
+                            let epoch = self.area_combat_timer_epoch;
                             let link = ctx.link().clone();
                             gloo_timers::callback::Timeout::new(2000, move || {
-                                link.send_message(AppMsg::AdvanceEncounter);
+                                link.send_message(AppMsg::AdvanceEncounterIfCurrent(epoch));
                             })
                             .forget();
                         }
@@ -361,9 +405,10 @@ impl Component for App {
                         storage::save_game(state);
 
                         if is_dead {
+                            let epoch = self.area_combat_timer_epoch;
                             let link = ctx.link().clone();
                             gloo_timers::callback::Timeout::new(2000, move || {
-                                link.send_message(AppMsg::AdvanceEncounter);
+                                link.send_message(AppMsg::AdvanceEncounterIfCurrent(epoch));
                             })
                             .forget();
                         }
@@ -429,6 +474,13 @@ impl Component for App {
                     }
                     true
                 }
+            }
+            AppMsg::AdvanceEncounterIfCurrent(epoch) => {
+                if epoch != self.area_combat_timer_epoch {
+                    return false;
+                }
+                ctx.link().send_message(AppMsg::AdvanceEncounter);
+                false
             }
             AppMsg::EnterPortal => {
                 self.pending_portal_to_town = false;
