@@ -269,11 +269,6 @@ impl Player {
     }
 
     pub fn total_equipment_weight(&self) -> u32 {
-        let inventory_weight: u32 = self
-            .list_equipment_inventory_items()
-            .iter()
-            .map(|item| item.weight)
-            .sum();
         let main_weight = self
             .equipped_item(EquipmentSlot::MainHand)
             .map(|item| item.weight)
@@ -283,9 +278,7 @@ impl Player {
             .map(|item| item.weight)
             .unwrap_or(0);
 
-        inventory_weight
-            .saturating_add(main_weight)
-            .saturating_add(off_weight)
+        main_weight.saturating_add(off_weight)
     }
 }
 
@@ -539,7 +532,7 @@ mod tests {
     }
 
     #[test]
-    fn total_equipment_weight_includes_equipped_and_inventory() {
+    fn total_equipment_weight_counts_only_equipped_items() {
         let mut player = Player::default();
         player.add_equipment_item("split_hilt_blade");
         player.add_equipment_item("split_hilt_blade");
@@ -547,6 +540,6 @@ mod tests {
         assert!(player.equip_item_to_slot("split_hilt_blade", EquipmentSlot::MainHand));
         assert!(player.equip_item_to_slot("split_hilt_blade", EquipmentSlot::OffHand));
 
-        assert_eq!(player.total_equipment_weight(), 3);
+        assert_eq!(player.total_equipment_weight(), 2);
     }
 }
