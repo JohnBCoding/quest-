@@ -16,7 +16,7 @@
 
     --font-main: 'Press Start 2P', monospace;
     --transition-speed: 400ms;
-    --transition-speed-town-portal-out: 450ms;
+    --transition-speed-town-portal-out: 560ms;
     --transition-speed-town-portal-in: 850ms;
 }
 
@@ -115,7 +115,7 @@ html, body {
 .transition-overlay.transition-town-portal-in::before {
     content: "";
     position: absolute;
-    inset: -28%;
+    inset: -22%;
     border-radius: 50%;
     pointer-events: none;
     background: radial-gradient(
@@ -210,27 +210,27 @@ html, body {
 @keyframes townPortalOutGlow {
     0% {
         opacity: 0;
-        transform: scale(0.63);
+        transform: scale(0.5);
     }
     30% {
         opacity: 0.42;
-        transform: scale(1);
+        transform: scale(0.8);
     }
     58% {
         opacity: 0.7;
-        transform: scale(1.6);
+        transform: scale(1.28);
     }
     75% {
         opacity: 0.28;
-        transform: scale(0.8);
+        transform: scale(0.64);
     }
     88% {
         opacity: 0;
-        transform: scale(0.54);
+        transform: scale(0.43);
     }
     100% {
         opacity: 0;
-        transform: scale(0.54);
+        transform: scale(0.43);
     }
 }
 
@@ -249,35 +249,35 @@ html, body {
 @keyframes townPortalInGlow {
     0% {
         opacity: 0;
-        transform: scale(0.39);
+        transform: scale(0.31);
     }
     26% {
         opacity: 0;
-        transform: scale(0.39);
+        transform: scale(0.31);
     }
     38% {
         opacity: 0.35;
-        transform: scale(0.91);
+        transform: scale(0.73);
     }
     56% {
         opacity: 0.72;
-        transform: scale(1.82);
+        transform: scale(1.46);
     }
     68% {
         opacity: 0.46;
-        transform: scale(1.22);
+        transform: scale(0.98);
     }
     78% {
         opacity: 0.2;
-        transform: scale(0.83);
+        transform: scale(0.66);
     }
     84% {
         opacity: 0;
-        transform: scale(0.61);
+        transform: scale(0.49);
     }
     100% {
         opacity: 0;
-        transform: scale(0.61);
+        transform: scale(0.49);
     }
 }
 
