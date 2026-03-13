@@ -19,6 +19,11 @@ pub struct AreaScreenProps {
     pub on_auto_action: Callback<()>,
     pub on_mob_attack: Callback<()>,
     pub on_enter_portal: Callback<()>,
+    pub on_portal_to_town: Callback<()>,
+    pub can_portal_to_town: bool,
+    pub is_portal_to_town_pending: bool,
+    pub action_progress_reset_event_id: u64,
+    pub is_portal_to_town_transitioning: bool,
     pub last_player_action_kind: Option<PlayerActionKind>,
     pub player_action_event_id: u64,
     pub mob_action_event_id: u64,
@@ -32,9 +37,11 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
     let action_progress = use_state(|| 0.0f64);
     let action_progress_ref = use_mut_ref(|| 0.0f64);
     let action_flash = use_state(|| false);
+    let player_timer_running_ref = use_mut_ref(|| false);
     let mob_action_progress = use_state(|| 0.0f64);
     let mob_action_progress_ref = use_mut_ref(|| 0.0f64);
     let mob_action_flash = use_state(|| false);
+    let mob_timer_running_ref = use_mut_ref(|| false);
     let player_hit = use_state(|| false);
     let player_heal = use_state(|| false);
     let level_up_flash = use_state(|| false);
@@ -134,6 +141,8 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         let has_auto = props.has_auto_combat;
         let has_mob = props.current_mob.as_ref().map_or(false, |m| !m.is_dead());
         let player_alive = props.player.is_alive();
+        let is_portal_pending = props.is_portal_to_town_pending;
+        let is_portal_transitioning = props.is_portal_to_town_transitioning;
         let player_action_speed = props.player.action_speed_ms;
         let mob_action_speed = props
             .current_mob
@@ -145,23 +154,39 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         let player_progress_state = action_progress.clone();
         let player_progress_ref = action_progress_ref.clone();
         let player_flash = action_flash.clone();
+        let player_running_ref = player_timer_running_ref.clone();
         let mob_progress_state = mob_action_progress.clone();
         let mob_progress_ref = mob_action_progress_ref.clone();
         let mob_flash = mob_action_flash.clone();
+        let mob_running_ref = mob_timer_running_ref.clone();
 
         use_effect_with(
             (
                 has_auto,
                 has_mob,
                 player_alive,
+                is_portal_pending,
+                is_portal_transitioning,
                 player_action_speed,
                 mob_action_speed,
             ),
-            move |(auto, mob_alive, alive, player_speed, mob_speed)| {
+            move |(
+                auto,
+                mob_alive,
+                alive,
+                portal_pending,
+                portal_transitioning,
+                player_speed,
+                mob_speed,
+            )| {
                 let mut interval_handle: Option<gloo_timers::callback::Interval> = None;
+                let run_player_timer =
+                    *alive && !*portal_transitioning && (*portal_pending || (*auto && *mob_alive));
+                let run_mob_timer = *alive && !*portal_transitioning && *mob_alive;
+                let was_player_timer_running = *player_running_ref.borrow();
+                let was_mob_timer_running = *mob_running_ref.borrow();
 
-                if *mob_alive && *alive {
-                    let auto_enabled = *auto;
+                if run_player_timer || run_mob_timer {
                     let tick_ms = 50u32;
                     let player_speed_ms = if *player_speed == 0 {
                         1000
@@ -180,14 +205,26 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     let player_action_cb = on_player_action_cb.clone();
                     let mob_attack_cb = on_mob_attack_cb.clone();
 
-                    *player_ref.borrow_mut() = 0.0;
-                    *mob_ref.borrow_mut() = 0.0;
+                    if run_player_timer && !was_player_timer_running {
+                        *player_ref.borrow_mut() = 0.0;
+                        player_state.set(0.0);
+                    } else if !run_player_timer {
+                        *player_ref.borrow_mut() = 0.0;
+                        player_state.set(0.0);
+                    }
+                    if run_mob_timer && !was_mob_timer_running {
+                        *mob_ref.borrow_mut() = 0.0;
+                        mob_state.set(0.0);
+                    } else if !run_mob_timer {
+                        *mob_ref.borrow_mut() = 0.0;
+                        mob_state.set(0.0);
+                    }
 
                     interval_handle =
                         Some(gloo_timers::callback::Interval::new(tick_ms, move || {
                             let mut player_fired_this_tick = false;
 
-                            if auto_enabled {
+                            if run_player_timer {
                                 let mut player_val = player_ref.borrow_mut();
                                 *player_val += player_increment;
                                 if *player_val >= 100.0 {
@@ -204,38 +241,37 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                                 } else {
                                     player_state.set(*player_val);
                                 }
-                            } else {
-                                *player_ref.borrow_mut() = 0.0;
-                                player_state.set(0.0);
                             }
 
-                            let mut mob_val = mob_ref.borrow_mut();
-                            *mob_val += mob_increment;
-                            if *mob_val >= 100.0 {
-                                let delay_ms = if player_fired_this_tick { 450 } else { 0 };
-                                let flash = mob_flash_handle.clone();
-                                let cb = mob_attack_cb.clone();
-                                let execute_mob = move || {
-                                    flash.set(true);
-                                    cb.emit(());
-                                    let flash_reset = flash.clone();
-                                    gloo_timers::callback::Timeout::new(300, move || {
-                                        flash_reset.set(false);
-                                    })
-                                    .forget();
-                                };
-
-                                if delay_ms > 0 {
-                                    gloo_timers::callback::Timeout::new(delay_ms, execute_mob)
+                            if run_mob_timer {
+                                let mut mob_val = mob_ref.borrow_mut();
+                                *mob_val += mob_increment;
+                                if *mob_val >= 100.0 {
+                                    let delay_ms = if player_fired_this_tick { 450 } else { 0 };
+                                    let flash = mob_flash_handle.clone();
+                                    let cb = mob_attack_cb.clone();
+                                    let execute_mob = move || {
+                                        flash.set(true);
+                                        cb.emit(());
+                                        let flash_reset = flash.clone();
+                                        gloo_timers::callback::Timeout::new(300, move || {
+                                            flash_reset.set(false);
+                                        })
                                         .forget();
-                                } else {
-                                    execute_mob();
-                                }
+                                    };
 
-                                *mob_val = 0.0;
-                                mob_state.set(0.0);
-                            } else {
-                                mob_state.set(*mob_val);
+                                    if delay_ms > 0 {
+                                        gloo_timers::callback::Timeout::new(delay_ms, execute_mob)
+                                            .forget();
+                                    } else {
+                                        execute_mob();
+                                    }
+
+                                    *mob_val = 0.0;
+                                    mob_state.set(0.0);
+                                } else {
+                                    mob_state.set(*mob_val);
+                                }
                             }
                         }));
                 } else {
@@ -243,11 +279,34 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     player_progress_state.set(0.0);
                     *mob_progress_ref.borrow_mut() = 0.0;
                     mob_progress_state.set(0.0);
+                    if *portal_transitioning {
+                        player_flash.set(false);
+                        mob_flash.set(false);
+                    }
                 }
+                *player_running_ref.borrow_mut() = run_player_timer;
+                *mob_running_ref.borrow_mut() = run_mob_timer;
 
                 move || drop(interval_handle)
             },
         );
+    }
+
+    // Reset action timer when the player queues portal-to-town.
+    {
+        let reset_event_id = props.action_progress_reset_event_id;
+        let player_progress_state = action_progress.clone();
+        let player_progress_ref = action_progress_ref.clone();
+        let player_flash_state = action_flash.clone();
+
+        use_effect_with(reset_event_id, move |event_id| {
+            if *event_id != 0 {
+                *player_progress_ref.borrow_mut() = 0.0;
+                player_progress_state.set(0.0);
+                player_flash_state.set(false);
+            }
+            || ()
+        });
     }
 
     // Level-up HUD animation trigger
@@ -278,6 +337,11 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
 
     let on_enter_portal = {
         let cb = props.on_enter_portal.clone();
+        Callback::from(move |_: MouseEvent| cb.emit(()))
+    };
+
+    let on_portal_to_town = {
+        let cb = props.on_portal_to_town.clone();
         Callback::from(move |_: MouseEvent| cb.emit(()))
     };
 
@@ -403,12 +467,22 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     </div>
                     {
                         if props.has_auto_combat {
-                            let flash_class = if *action_flash { "action-speed-bar-flash" } else { "" };
-                            html! {
-                                <div class={classes!("action-speed-bar-container", flash_class)}>
-                                    <div class="action-speed-bar-fill" style={format!("width: {}%;", *action_progress)}></div>
-                                    <div class="action-speed-bar-text">{"Action"}</div>
-                                </div>
+                            if props.is_portal_to_town_pending {
+                                html! {
+                                    <div class="portal-action-speed-bar-container">
+                                        <div class="portal-action-speed-bar-fill" style={format!("width: {}%;", *action_progress)}></div>
+                                        <div class="portal-action-speed-bar-shimmer"></div>
+                                        <div class="portal-action-speed-bar-text">{"Portal"}</div>
+                                    </div>
+                                }
+                            } else {
+                                let flash_class = if *action_flash { "action-speed-bar-flash" } else { "" };
+                                html! {
+                                    <div class={classes!("action-speed-bar-container", flash_class)}>
+                                        <div class="action-speed-bar-fill" style={format!("width: {}%;", *action_progress)}></div>
+                                        <div class="action-speed-bar-text">{"Action"}</div>
+                                    </div>
+                                }
                             }
                         } else {
                             html! {}
@@ -435,9 +509,27 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                             html! {}
                         }
                     }
-                    <button class="btn btn-danger" onclick={on_exit}>
-                        { "Exit Game" }
-                    </button>
+                    {
+                        if props.can_portal_to_town {
+                            html! {
+                                <button class="btn btn-warning" onclick={on_portal_to_town} disabled={props.is_portal_to_town_pending}>
+                                    {
+                                        if props.is_portal_to_town_pending {
+                                            "Portaling..."
+                                        } else {
+                                            "Portal To Town"
+                                        }
+                                    }
+                                </button>
+                            }
+                        } else {
+                            html! {
+                                <button class="btn btn-danger" onclick={on_exit}>
+                                    { "Exit Game" }
+                                </button>
+                            }
+                        }
+                    }
                 </div>
             </div>
         </div>

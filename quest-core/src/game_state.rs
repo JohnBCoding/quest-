@@ -26,6 +26,8 @@ pub struct GameState {
     pub pending_fruit_id: Option<String>,
     #[serde(default)]
     pub action_counter: u32,
+    #[serde(default)]
+    pub portals_unlocked: bool,
     pub version: u32,
 }
 
@@ -45,6 +47,7 @@ impl GameState {
             fruit_scene_active: false,
             pending_fruit_id: None,
             action_counter: 0,
+            portals_unlocked: false,
             version: SAVE_VERSION,
         };
         (state, rng_manager)
@@ -68,6 +71,7 @@ impl GameState {
         state.player.ensure_auto_combat_actions();
         if state.in_town {
             state.player.refill_health_potions();
+            state.portals_unlocked = true;
         }
 
         Ok(state)
@@ -169,9 +173,24 @@ impl GameState {
             self.fruit_scene_active = true;
             self.pending_fruit_id = Some("fruit_of_instinct".to_string());
         } else {
-            self.in_town = true;
-            self.player.refill_health_potions();
+            self.enter_town();
         }
+    }
+
+    fn enter_town(&mut self) {
+        self.in_town = true;
+        self.portals_unlocked = true;
+        self.player.refill_health_potions();
+    }
+
+    pub fn portal_to_town(&mut self) -> bool {
+        if self.in_town {
+            return false;
+        }
+        self.current_mob = None;
+        self.is_boss_encounter = false;
+        self.enter_town();
+        true
     }
 
     pub fn complete_fruit_scene(&mut self) {
@@ -235,6 +254,7 @@ mod tests {
         assert!(!state.fruit_scene_active);
         assert!(state.pending_fruit_id.is_none());
         assert_eq!(state.action_counter, 0);
+        assert!(!state.portals_unlocked);
     }
 
     #[test]
@@ -537,6 +557,7 @@ mod tests {
         let advanced = state.advance_encounter();
         assert!(advanced);
         assert!(state.in_town);
+        assert!(state.portals_unlocked);
         assert!(!state.fruit_scene_active);
     }
 
@@ -661,6 +682,61 @@ mod tests {
         state.advance_encounter();
         assert!(state.in_town);
         assert_eq!(state.player.health_potion_uses, 5);
+    }
+
+    #[test]
+    fn portal_to_town_unlocks_portals_and_clears_encounter_state() {
+        let (mut state, _) = GameState::new_game();
+        state.current_area = Area::get_by_id("the_fringe").unwrap();
+        state.current_mob = Mob::get_by_id("rat_lord");
+        state.is_boss_encounter = true;
+        state.player.eat_fruit("fruit_of_instinct");
+        state.player.health_potion_uses = 2;
+
+        let success = state.portal_to_town();
+        assert!(success);
+        assert!(state.in_town);
+        assert!(state.portals_unlocked);
+        assert!(state.current_mob.is_none());
+        assert!(!state.is_boss_encounter);
+        assert_eq!(state.player.health_potion_uses, 5);
+    }
+
+    #[test]
+    fn deserialize_old_town_save_unlocks_portals() {
+        let old_town_save = r#"{
+            "player": {
+                "name":"Hero",
+                "level":1,
+                "health":50,
+                "max_health":50,
+                "experience":0,
+                "max_experience":250,
+                "eaten_fruits":["fruit_of_instinct"],
+                "actions":[{"id":"attack","name":"Attack","trigger":"EveryAction"}],
+                "action_speed_ms":1000
+            },
+            "current_area": {
+                "id":"the_fringe",
+                "name":"The Fringe",
+                "description":"x",
+                "required_level":1,
+                "base_encounter_amount":1,
+                "bosses":["rat_lord"]
+            },
+            "current_mob": null,
+            "encounters_cleared":0,
+            "rng_snapshot":{"seeds":{"mob_spawns":1}},
+            "is_boss_encounter":false,
+            "in_town":true,
+            "fruit_scene_active":false,
+            "pending_fruit_id":null,
+            "version":3
+        }"#;
+
+        let state = GameState::deserialize(old_town_save).unwrap();
+        assert!(state.in_town);
+        assert!(state.portals_unlocked);
     }
 
     #[test]
