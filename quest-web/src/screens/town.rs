@@ -61,7 +61,7 @@ pub fn town_screen(props: &TownScreenProps) -> Html {
             <div class="action-bar" style="justify-content: center;">
                 <div class="action-buttons">
                     <button class="btn btn-danger" onclick={on_exit}>
-                        { "Exit Game" }
+                        { "Exit and Save" }
                     </button>
                 </div>
             </div>

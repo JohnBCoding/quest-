@@ -27,12 +27,19 @@ pub enum TransitionState {
     WipeIn,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum TransitionEffect {
+    Wipe,
+    TownPortal,
+}
+
 #[derive(Clone, PartialEq)]
 pub enum PostTransitionLogic {
     AdvanceEncounter,
     EatFruit,
     CloseCharacterSheet,
     TravelToArea(String),
+    PortalToTown,
 }
 
 #[derive(Clone, PartialEq)]
@@ -45,6 +52,7 @@ pub struct App {
     screen: Screen,
     pending_screen: Option<Screen>,
     transition: TransitionState,
+    transition_effect: TransitionEffect,
     game_state: Option<GameState>,
     rng_manager: Option<RngManager>,
     from_fruit_scene: bool,
@@ -52,6 +60,8 @@ pub struct App {
     last_player_action_kind: Option<PlayerActionKind>,
     last_player_action_event_id: u64,
     last_mob_action_event_id: u64,
+    pending_portal_to_town: bool,
+    action_progress_reset_event_id: u64,
 }
 
 pub enum AppMsg {
@@ -63,6 +73,7 @@ pub enum AppMsg {
     ExitGame,
     AttackMob,
     PerformAutoAction,
+    QueuePortalToTown,
     MobAttack,
     AdvanceEncounter,
     EnterPortal,
@@ -74,6 +85,46 @@ pub enum AppMsg {
     NavigateWithLogic(Screen, PostTransitionLogic),
 }
 
+impl App {
+    fn transition_duration_ms(effect: TransitionEffect) -> u32 {
+        match effect {
+            TransitionEffect::Wipe => 400,
+            TransitionEffect::TownPortal => 520,
+        }
+    }
+
+    fn start_transition(&mut self, ctx: &Context<Self>, effect: TransitionEffect) {
+        self.transition_effect = effect;
+        self.transition = TransitionState::WipeOut;
+        let duration = Self::transition_duration_ms(effect);
+        let link = ctx.link().clone();
+        gloo_timers::callback::Timeout::new(duration, move || {
+            link.send_message(AppMsg::TransitionMidpoint);
+        })
+        .forget();
+    }
+
+    fn transition_effect_for_logic(&self, logic: &PostTransitionLogic) -> TransitionEffect {
+        match logic {
+            PostTransitionLogic::PortalToTown => TransitionEffect::TownPortal,
+            PostTransitionLogic::AdvanceEncounter => {
+                if let Some(state) = self.game_state.as_ref() {
+                    let is_non_beach_boss =
+                        state.is_boss_encounter && state.current_area.id != "the_beach";
+                    if is_non_beach_boss && state.portals_unlocked {
+                        TransitionEffect::TownPortal
+                    } else {
+                        TransitionEffect::Wipe
+                    }
+                } else {
+                    TransitionEffect::Wipe
+                }
+            }
+            _ => TransitionEffect::Wipe,
+        }
+    }
+}
+
 impl Component for App {
     type Message = AppMsg;
     type Properties = ();
@@ -83,6 +134,7 @@ impl Component for App {
             screen: Screen::MainMenu,
             pending_screen: None,
             transition: TransitionState::None,
+            transition_effect: TransitionEffect::Wipe,
             game_state: None,
             rng_manager: None,
             from_fruit_scene: false,
@@ -90,6 +142,8 @@ impl Component for App {
             last_player_action_kind: None,
             last_player_action_event_id: 0,
             last_mob_action_event_id: 0,
+            pending_portal_to_town: false,
+            action_progress_reset_event_id: 0,
         }
     }
 
@@ -97,27 +151,14 @@ impl Component for App {
         match msg {
             AppMsg::Navigate(screen) => {
                 self.pending_screen = Some(screen);
-                self.transition = TransitionState::WipeOut;
-
-                let link = ctx.link().clone();
-                gloo_timers::callback::Timeout::new(400, move || {
-                    link.send_message(AppMsg::TransitionMidpoint);
-                })
-                .forget();
-
+                self.start_transition(ctx, TransitionEffect::Wipe);
                 true
             }
             AppMsg::NavigateWithLogic(screen, logic) => {
+                let transition_effect = self.transition_effect_for_logic(&logic);
                 self.pending_screen = Some(screen);
                 self.post_transition_logic = Some(logic);
-                self.transition = TransitionState::WipeOut;
-
-                let link = ctx.link().clone();
-                gloo_timers::callback::Timeout::new(400, move || {
-                    link.send_message(AppMsg::TransitionMidpoint);
-                })
-                .forget();
-
+                self.start_transition(ctx, transition_effect);
                 true
             }
             AppMsg::TransitionMidpoint => {
@@ -128,8 +169,12 @@ impl Component for App {
                                 if state.advance_encounter() {
                                     storage::save_game(state);
                                     if state.fruit_scene_active {
+                                        self.pending_portal_to_town = false;
                                         self.screen = Screen::FruitScene;
                                     } else {
+                                        if state.in_town {
+                                            self.pending_portal_to_town = false;
+                                        }
                                         self.screen = Screen::InGame;
                                     }
                                 }
@@ -140,6 +185,7 @@ impl Component for App {
                                 state.complete_fruit_scene();
                                 storage::save_game(state);
                                 self.from_fruit_scene = true;
+                                self.pending_portal_to_town = false;
                                 self.screen = Screen::CharacterSheet;
                             }
                         }
@@ -151,12 +197,23 @@ impl Component for App {
                                     storage::save_game(state);
                                 }
                             }
+                            self.pending_portal_to_town = false;
                             self.screen = Screen::InGame;
                         }
                         PostTransitionLogic::TravelToArea(area_id) => {
                             if let Some(ref mut state) = self.game_state {
                                 if state.enter_area(&area_id) {
                                     storage::save_game(state);
+                                    self.pending_portal_to_town = false;
+                                    self.screen = Screen::InGame;
+                                }
+                            }
+                        }
+                        PostTransitionLogic::PortalToTown => {
+                            if let Some(ref mut state) = self.game_state {
+                                if state.portal_to_town() {
+                                    storage::save_game(state);
+                                    self.pending_portal_to_town = false;
                                     self.screen = Screen::InGame;
                                 }
                             }
@@ -169,7 +226,8 @@ impl Component for App {
                 self.transition = TransitionState::WipeIn;
 
                 let link = ctx.link().clone();
-                gloo_timers::callback::Timeout::new(400, move || {
+                let duration = Self::transition_duration_ms(self.transition_effect);
+                gloo_timers::callback::Timeout::new(duration, move || {
                     link.send_message(AppMsg::TransitionEnd);
                 })
                 .forget();
@@ -178,6 +236,7 @@ impl Component for App {
             }
             AppMsg::TransitionEnd => {
                 self.transition = TransitionState::None;
+                self.transition_effect = TransitionEffect::Wipe;
                 true
             }
             AppMsg::NewGame => {
@@ -185,6 +244,8 @@ impl Component for App {
                 storage::save_game(&state);
                 self.game_state = Some(state);
                 self.rng_manager = Some(rng);
+                self.pending_portal_to_town = false;
+                self.action_progress_reset_event_id = 0;
                 self.last_player_action_kind = None;
                 self.last_player_action_event_id = 0;
                 self.last_mob_action_event_id = 0;
@@ -196,6 +257,8 @@ impl Component for App {
                     let rng = state.restore_rng();
                     self.game_state = Some(state);
                     self.rng_manager = Some(rng);
+                    self.pending_portal_to_town = false;
+                    self.action_progress_reset_event_id = 0;
                     self.last_player_action_kind = None;
                     self.last_player_action_event_id = 0;
                     self.last_mob_action_event_id = 0;
@@ -209,10 +272,23 @@ impl Component for App {
                 }
                 self.game_state = None;
                 self.rng_manager = None;
+                self.pending_portal_to_town = false;
+                self.action_progress_reset_event_id = 0;
                 self.last_player_action_kind = None;
                 self.last_player_action_event_id = 0;
                 self.last_mob_action_event_id = 0;
                 ctx.link().send_message(AppMsg::Navigate(Screen::MainMenu));
+                false
+            }
+            AppMsg::QueuePortalToTown => {
+                if let Some(state) = self.game_state.as_ref() {
+                    if !state.in_town && state.portals_unlocked && state.player.has_auto_combat() {
+                        self.pending_portal_to_town = true;
+                        self.action_progress_reset_event_id =
+                            self.action_progress_reset_event_id.saturating_add(1);
+                        return true;
+                    }
+                }
                 false
             }
             AppMsg::AttackMob => {
@@ -239,6 +315,23 @@ impl Component for App {
             }
             AppMsg::PerformAutoAction => {
                 if let Some(ref mut state) = self.game_state {
+                    let should_cancel_portal = state.in_town
+                        || state.fruit_scene_active
+                        || !state.player.is_alive()
+                        || !state.portals_unlocked;
+                    if self.pending_portal_to_town && should_cancel_portal {
+                        self.pending_portal_to_town = false;
+                    }
+
+                    if self.pending_portal_to_town {
+                        self.pending_portal_to_town = false;
+                        ctx.link().send_message(AppMsg::NavigateWithLogic(
+                            Screen::InGame,
+                            PostTransitionLogic::PortalToTown,
+                        ));
+                        return false;
+                    }
+
                     if let Some(executed) = state.execute_prioritized_action() {
                         let is_dead = state.current_mob.as_ref().map_or(false, |m| m.is_dead());
                         self.last_player_action_kind = match executed {
@@ -267,6 +360,9 @@ impl Component for App {
             AppMsg::MobAttack => {
                 if let Some(ref mut state) = self.game_state {
                     if state.execute_mob_attack().is_some() {
+                        if !state.player.is_alive() {
+                            self.pending_portal_to_town = false;
+                        }
                         self.last_mob_action_event_id =
                             self.last_mob_action_event_id.saturating_add(1);
                         storage::save_game(state);
@@ -276,6 +372,7 @@ impl Component for App {
                 false
             }
             AppMsg::AdvanceEncounter => {
+                self.pending_portal_to_town = false;
                 let mut needs_wipe = false;
 
                 if let Some(ref mut state) = self.game_state {
@@ -313,6 +410,7 @@ impl Component for App {
                 }
             }
             AppMsg::EnterPortal => {
+                self.pending_portal_to_town = false;
                 let mut state_changed = false;
                 if let Some(ref mut state) = self.game_state {
                     if let Some(mut rng) = self.rng_manager.take() {
@@ -363,10 +461,14 @@ impl Component for App {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let transition_class = match self.transition {
-            TransitionState::None => "",
-            TransitionState::WipeOut => "transition-wipe-out",
-            TransitionState::WipeIn => "transition-wipe-in",
+        let transition_class = match (self.transition.clone(), self.transition_effect) {
+            (TransitionState::None, _) => "",
+            (TransitionState::WipeOut, TransitionEffect::Wipe) => "transition-wipe-out",
+            (TransitionState::WipeIn, TransitionEffect::Wipe) => "transition-wipe-in",
+            (TransitionState::WipeOut, TransitionEffect::TownPortal) => {
+                "transition-town-portal-out"
+            }
+            (TransitionState::WipeIn, TransitionEffect::TownPortal) => "transition-town-portal-in",
         };
 
         let content = match self.screen {
@@ -386,6 +488,7 @@ impl Component for App {
                 let on_auto_action = ctx.link().callback(|_| AppMsg::PerformAutoAction);
                 let on_mob_attack = ctx.link().callback(|_| AppMsg::MobAttack);
                 let on_enter_portal = ctx.link().callback(|_| AppMsg::EnterPortal);
+                let on_portal_to_town = ctx.link().callback(|_| AppMsg::QueuePortalToTown);
                 if let Some(ref state) = self.game_state {
                     if state.in_town {
                         let on_open_cs = ctx.link().callback(|_| AppMsg::OpenCharacterSheet);
@@ -414,6 +517,10 @@ impl Component for App {
                                 on_auto_action={on_auto_action}
                                 on_mob_attack={on_mob_attack}
                                 on_enter_portal={on_enter_portal}
+                                on_portal_to_town={on_portal_to_town}
+                                can_portal_to_town={state.portals_unlocked}
+                                is_portal_to_town_pending={self.pending_portal_to_town}
+                                action_progress_reset_event_id={self.action_progress_reset_event_id}
                                 last_player_action_kind={self.last_player_action_kind.clone()}
                                 player_action_event_id={self.last_player_action_event_id}
                                 mob_action_event_id={self.last_mob_action_event_id}

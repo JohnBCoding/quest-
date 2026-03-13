@@ -16,6 +16,7 @@
 
     --font-main: 'Press Start 2P', monospace;
     --transition-speed: 400ms;
+    --transition-speed-town-portal: 520ms;
 }
 
 /* --- Reset & Base --- */
@@ -63,11 +64,14 @@ html, body {
 
 /* Freeze all child animations during screen transitions */
 .screen-container.transition-wipe-out,
-.screen-container.transition-wipe-in {
+.screen-container.transition-wipe-in,
+.screen-container.transition-town-portal-out,
+.screen-container.transition-town-portal-in {
     pointer-events: none;
 }
 
-.screen-container.transition-wipe-out * {
+.screen-container.transition-wipe-out *,
+.screen-container.transition-town-portal-out * {
     animation-play-state: paused !important;
     transition: none !important;
 }
@@ -92,6 +96,16 @@ html, body {
 
 .transition-overlay.transition-wipe-in {
     animation: wipeIn var(--transition-speed) ease-out forwards;
+    pointer-events: all;
+}
+
+.transition-overlay.transition-town-portal-out {
+    animation: townPortalOut var(--transition-speed-town-portal) steps(6, end) forwards;
+    pointer-events: all;
+}
+
+.transition-overlay.transition-town-portal-in {
+    animation: townPortalIn var(--transition-speed-town-portal) steps(6, end) forwards;
     pointer-events: all;
 }
 
@@ -144,6 +158,86 @@ html, body {
     100% {
         opacity: 0;
         background-image: none;
+    }
+}
+
+@keyframes townPortalOut {
+    0% {
+        opacity: 0;
+        background-image:
+            radial-gradient(
+                circle at 50% 50%,
+                rgba(230, 200, 110, 0.2) 0%,
+                rgba(85, 65, 95, 0.1) 28%,
+                rgba(0, 0, 0, 0) 56%,
+                rgba(0, 0, 0, 0.92) 100%
+            ),
+            repeating-linear-gradient(
+                0deg,
+                transparent 0px,
+                transparent 2px,
+                rgba(230, 200, 110, 0.05) 2px,
+                rgba(230, 200, 110, 0.05) 3px
+            );
+    }
+    60% {
+        opacity: 0.75;
+        background-image:
+            radial-gradient(
+                circle at 50% 50%,
+                rgba(230, 200, 110, 0.14) 0%,
+                rgba(80, 140, 215, 0.09) 32%,
+                rgba(0, 0, 0, 0.4) 60%,
+                rgba(0, 0, 0, 0.98) 100%
+            ),
+            repeating-linear-gradient(
+                0deg,
+                transparent 0px,
+                transparent 2px,
+                rgba(220, 245, 255, 0.05) 2px,
+                rgba(220, 245, 255, 0.05) 3px
+            );
+    }
+    100% {
+        opacity: 1;
+        background-color: var(--c-bg);
+        background-image: none;
+    }
+}
+
+@keyframes townPortalIn {
+    0% {
+        opacity: 1;
+        background-color: var(--c-bg);
+        background-image: none;
+    }
+    45% {
+        opacity: 0.85;
+        background-image:
+            radial-gradient(
+                circle at 50% 50%,
+                rgba(230, 200, 110, 0.12) 0%,
+                rgba(80, 140, 215, 0.08) 36%,
+                rgba(0, 0, 0, 0.55) 62%,
+                rgba(0, 0, 0, 0.98) 100%
+            ),
+            repeating-linear-gradient(
+                0deg,
+                transparent 0px,
+                transparent 2px,
+                rgba(220, 245, 255, 0.05) 2px,
+                rgba(220, 245, 255, 0.05) 3px
+            );
+    }
+    100% {
+        opacity: 0;
+        background-image:
+            radial-gradient(
+                circle at 50% 50%,
+                rgba(230, 200, 110, 0.03) 0%,
+                rgba(85, 65, 95, 0.02) 40%,
+                transparent 75%
+            );
     }
 }
 
@@ -1088,6 +1182,7 @@ html, body {
     border: 2px solid var(--c-purple);
     position: relative;
     margin-top: 0.3rem;
+    overflow: hidden;
 }
 
 .action-speed-bar-fill {
@@ -1112,10 +1207,51 @@ html, body {
     animation: actionFlash 0.3s steps(3, end);
 }
 
+.action-speed-bar-portal {
+    border-color: var(--c-gold);
+    box-shadow: 0 0 8px rgba(230, 200, 110, 0.35);
+}
+
+.action-speed-bar-fill-portal {
+    background: linear-gradient(
+        90deg,
+        rgba(85, 65, 95, 0.85),
+        rgba(230, 200, 110, 0.95),
+        rgba(80, 140, 215, 0.9)
+    );
+    background-size: 200% 100%;
+    animation: portalCharge 1.2s linear infinite;
+}
+
+.action-speed-bar-portal-shimmer {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        100deg,
+        transparent 0%,
+        rgba(230, 200, 110, 0.05) 35%,
+        rgba(220, 245, 255, 0.35) 50%,
+        rgba(230, 200, 110, 0.05) 65%,
+        transparent 100%
+    );
+    animation: portalBarShimmer 1.5s linear infinite;
+    pointer-events: none;
+}
+
 @keyframes actionFlash {
     0% { border-color: var(--c-gold); box-shadow: 0 0 10px var(--c-gold); }
     50% { border-color: var(--c-white); box-shadow: 0 0 20px var(--c-white); }
     100% { border-color: var(--c-purple); box-shadow: none; }
+}
+
+@keyframes portalCharge {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+
+@keyframes portalBarShimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
 }
 
 .player-level.level-up-flash {

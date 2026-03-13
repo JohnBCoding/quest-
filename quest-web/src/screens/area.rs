@@ -19,6 +19,10 @@ pub struct AreaScreenProps {
     pub on_auto_action: Callback<()>,
     pub on_mob_attack: Callback<()>,
     pub on_enter_portal: Callback<()>,
+    pub on_portal_to_town: Callback<()>,
+    pub can_portal_to_town: bool,
+    pub is_portal_to_town_pending: bool,
+    pub action_progress_reset_event_id: u64,
     pub last_player_action_kind: Option<PlayerActionKind>,
     pub player_action_event_id: u64,
     pub mob_action_event_id: u64,
@@ -250,6 +254,23 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
         );
     }
 
+    // Reset action timer when the player queues portal-to-town.
+    {
+        let reset_event_id = props.action_progress_reset_event_id;
+        let player_progress_state = action_progress.clone();
+        let player_progress_ref = action_progress_ref.clone();
+        let player_flash_state = action_flash.clone();
+
+        use_effect_with(reset_event_id, move |event_id| {
+            if *event_id != 0 {
+                *player_progress_ref.borrow_mut() = 0.0;
+                player_progress_state.set(0.0);
+                player_flash_state.set(false);
+            }
+            || ()
+        });
+    }
+
     // Level-up HUD animation trigger
     {
         let flash_state = level_up_flash.clone();
@@ -278,6 +299,11 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
 
     let on_enter_portal = {
         let cb = props.on_enter_portal.clone();
+        Callback::from(move |_: MouseEvent| cb.emit(()))
+    };
+
+    let on_portal_to_town = {
+        let cb = props.on_portal_to_town.clone();
         Callback::from(move |_: MouseEvent| cb.emit(()))
     };
 
@@ -404,10 +430,32 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     {
                         if props.has_auto_combat {
                             let flash_class = if *action_flash { "action-speed-bar-flash" } else { "" };
+                            let portal_class = if props.is_portal_to_town_pending {
+                                "action-speed-bar-portal"
+                            } else {
+                                ""
+                            };
+                            let fill_class = if props.is_portal_to_town_pending {
+                                "action-speed-bar-fill-portal"
+                            } else {
+                                ""
+                            };
+                            let action_label = if props.is_portal_to_town_pending {
+                                "Portal"
+                            } else {
+                                "Action"
+                            };
                             html! {
-                                <div class={classes!("action-speed-bar-container", flash_class)}>
-                                    <div class="action-speed-bar-fill" style={format!("width: {}%;", *action_progress)}></div>
-                                    <div class="action-speed-bar-text">{"Action"}</div>
+                                <div class={classes!("action-speed-bar-container", flash_class, portal_class)}>
+                                    <div class={classes!("action-speed-bar-fill", fill_class)} style={format!("width: {}%;", *action_progress)}></div>
+                                    {
+                                        if props.is_portal_to_town_pending {
+                                            html! { <div class="action-speed-bar-portal-shimmer"></div> }
+                                        } else {
+                                            html! {}
+                                        }
+                                    }
+                                    <div class="action-speed-bar-text">{action_label}</div>
                                 </div>
                             }
                         } else {
@@ -435,9 +483,27 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                             html! {}
                         }
                     }
-                    <button class="btn btn-danger" onclick={on_exit}>
-                        { "Exit Game" }
-                    </button>
+                    {
+                        if props.can_portal_to_town {
+                            html! {
+                                <button class="btn btn-warning" onclick={on_portal_to_town} disabled={props.is_portal_to_town_pending}>
+                                    {
+                                        if props.is_portal_to_town_pending {
+                                            "Portaling..."
+                                        } else {
+                                            "Portal To Town"
+                                        }
+                                    }
+                                </button>
+                            }
+                        } else {
+                            html! {
+                                <button class="btn btn-danger" onclick={on_exit}>
+                                    { "Exit Game" }
+                                </button>
+                            }
+                        }
+                    }
                 </div>
             </div>
         </div>
