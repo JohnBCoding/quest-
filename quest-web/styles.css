@@ -88,6 +88,7 @@ html, body {
     pointer-events: none;
     background: var(--c-bg);
     opacity: 0;
+    overflow: hidden;
 }
 
 .transition-overlay.transition-wipe-out {
@@ -101,13 +102,42 @@ html, body {
 }
 
 .transition-overlay.transition-town-portal-out {
-    animation: townPortalOut var(--transition-speed-town-portal-out) ease-in forwards;
+    animation: townPortalOutShield var(--transition-speed-town-portal-out) ease-in forwards;
     pointer-events: all;
 }
 
 .transition-overlay.transition-town-portal-in {
-    animation: townPortalIn var(--transition-speed-town-portal-in) ease-out forwards;
+    animation: townPortalInShield var(--transition-speed-town-portal-in) ease-out forwards;
     pointer-events: all;
+}
+
+.transition-overlay.transition-town-portal-out::before,
+.transition-overlay.transition-town-portal-in::before {
+    content: "";
+    position: absolute;
+    inset: -35%;
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(
+        circle,
+        rgba(230, 200, 110, 0.55) 0%,
+        rgba(220, 245, 255, 0.28) 18%,
+        rgba(80, 140, 215, 0.2) 34%,
+        rgba(85, 65, 95, 0.08) 52%,
+        rgba(0, 0, 0, 0) 72%
+    );
+    transform-origin: center center;
+    filter: blur(1px);
+}
+
+.transition-overlay.transition-town-portal-out::before {
+    animation: townPortalOutGlow var(--transition-speed-town-portal-out)
+        cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.transition-overlay.transition-town-portal-in::before {
+    animation: townPortalInGlow var(--transition-speed-town-portal-in)
+        cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes wipeOut {
@@ -162,111 +192,92 @@ html, body {
     }
 }
 
-@keyframes townPortalOut {
+@keyframes townPortalOutShield {
     0% {
         opacity: 0;
-        background-color: var(--c-bg);
-        background-image:
-            radial-gradient(
-                circle at 50% 50%,
-                rgba(230, 200, 110, 0.14) 0%,
-                rgba(80, 140, 215, 0.08) 20%,
-                rgba(0, 0, 0, 0.24) 46%,
-                rgba(0, 0, 0, 0.95) 100%
-            );
     }
-    36% {
-        opacity: 0.6;
-        background-image:
-            radial-gradient(
-                circle at 50% 50%,
-                rgba(230, 200, 110, 0.2) 0%,
-                rgba(80, 140, 215, 0.12) 14%,
-                rgba(0, 0, 0, 0.58) 34%,
-                rgba(0, 0, 0, 0.98) 100%
-            );
+    35% {
+        opacity: 0.68;
     }
-    62% {
-        opacity: 0.9;
-        background-image:
-            radial-gradient(
-                circle at 50% 50%,
-                rgba(230, 200, 110, 0.12) 0%,
-                rgba(80, 140, 215, 0.07) 8%,
-                rgba(0, 0, 0, 0.76) 21%,
-                rgba(0, 0, 0, 1) 100%
-            );
-    }
-    78% {
+    65% {
         opacity: 1;
-        background-color: var(--c-bg);
-        background-image: none;
     }
     100% {
         opacity: 1;
-        background-color: var(--c-bg);
-        background-image: none;
     }
 }
 
-@keyframes townPortalIn {
+@keyframes townPortalOutGlow {
     0% {
-        opacity: 1;
-        background-color: var(--c-bg);
-        background-image: none;
+        opacity: 0;
+        transform: scale(0.72);
     }
-    28% {
-        opacity: 1;
-        background-color: var(--c-bg);
-        background-image: none;
+    30% {
+        opacity: 0.42;
+        transform: scale(1.15);
     }
-    44% {
-        opacity: 0.95;
-        background-image:
-            radial-gradient(
-                circle at 50% 50%,
-                rgba(230, 200, 110, 0.08) 0%,
-                rgba(80, 140, 215, 0.05) 8%,
-                rgba(0, 0, 0, 0.84) 20%,
-                rgba(0, 0, 0, 0.98) 100%
-            );
+    58% {
+        opacity: 0.7;
+        transform: scale(1.85);
     }
-    62% {
-        opacity: 0.9;
-        background-image:
-            radial-gradient(
-                circle at 50% 50%,
-                rgba(230, 200, 110, 0.15) 0%,
-                rgba(80, 140, 215, 0.1) 24%,
-                rgba(0, 0, 0, 0.7) 50%,
-                rgba(0, 0, 0, 0.97) 100%
-            );
-    }
-    78% {
-        opacity: 0.82;
-        background-image:
-            radial-gradient(
-                circle at 50% 50%,
-                rgba(230, 200, 110, 0.11) 0%,
-                rgba(80, 140, 215, 0.07) 13%,
-                rgba(0, 0, 0, 0.78) 30%,
-                rgba(0, 0, 0, 0.98) 100%
-            );
+    75% {
+        opacity: 0.28;
+        transform: scale(0.92);
     }
     88% {
-        opacity: 0.62;
-        background-image:
-            radial-gradient(
-                circle at 50% 50%,
-                rgba(230, 200, 110, 0.08) 0%,
-                rgba(80, 140, 215, 0.05) 8%,
-                rgba(0, 0, 0, 0.82) 20%,
-                rgba(0, 0, 0, 0.98) 100%
-            );
+        opacity: 0;
+        transform: scale(0.62);
     }
     100% {
         opacity: 0;
-        background-image: none;
+        transform: scale(0.62);
+    }
+}
+
+@keyframes townPortalInShield {
+    0% {
+        opacity: 1;
+    }
+    84% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes townPortalInGlow {
+    0% {
+        opacity: 0;
+        transform: scale(0.45);
+    }
+    26% {
+        opacity: 0;
+        transform: scale(0.45);
+    }
+    38% {
+        opacity: 0.35;
+        transform: scale(1.05);
+    }
+    56% {
+        opacity: 0.72;
+        transform: scale(2.1);
+    }
+    68% {
+        opacity: 0.46;
+        transform: scale(1.4);
+    }
+    78% {
+        opacity: 0.2;
+        transform: scale(0.95);
+    }
+    84% {
+        opacity: 0;
+        transform: scale(0.7);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.7);
     }
 }
 
