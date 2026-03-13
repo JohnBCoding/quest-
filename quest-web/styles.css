@@ -16,7 +16,8 @@
 
     --font-main: 'Press Start 2P', monospace;
     --transition-speed: 400ms;
-    --transition-speed-town-portal: 900ms;
+    --transition-speed-town-portal-out: 900ms;
+    --transition-speed-town-portal-in: 1300ms;
 }
 
 /* --- Reset & Base --- */
@@ -100,12 +101,12 @@ html, body {
 }
 
 .transition-overlay.transition-town-portal-out {
-    animation: townPortalOut var(--transition-speed-town-portal) steps(6, end) forwards;
+    animation: townPortalOut var(--transition-speed-town-portal-out) ease-in forwards;
     pointer-events: all;
 }
 
 .transition-overlay.transition-town-portal-in {
-    animation: townPortalIn var(--transition-speed-town-portal) steps(6, end) forwards;
+    animation: townPortalIn var(--transition-speed-town-portal-in) ease-out forwards;
     pointer-events: all;
 }
 
@@ -168,35 +169,35 @@ html, body {
         background-image:
             radial-gradient(
                 circle at 50% 50%,
-                rgba(230, 200, 110, 0.18) 0%,
-                rgba(80, 140, 215, 0.12) 18%,
-                rgba(0, 0, 0, 0.2) 42%,
+                rgba(230, 200, 110, 0.14) 0%,
+                rgba(80, 140, 215, 0.08) 20%,
+                rgba(0, 0, 0, 0.24) 46%,
                 rgba(0, 0, 0, 0.95) 100%
             );
     }
-    28% {
+    36% {
         opacity: 0.6;
         background-image:
             radial-gradient(
                 circle at 50% 50%,
-                rgba(230, 200, 110, 0.16) 0%,
-                rgba(80, 140, 215, 0.1) 12%,
-                rgba(0, 0, 0, 0.48) 30%,
+                rgba(230, 200, 110, 0.2) 0%,
+                rgba(80, 140, 215, 0.12) 14%,
+                rgba(0, 0, 0, 0.58) 34%,
                 rgba(0, 0, 0, 0.98) 100%
             );
     }
-    52% {
+    62% {
         opacity: 0.9;
         background-image:
             radial-gradient(
                 circle at 50% 50%,
-                rgba(230, 200, 110, 0.1) 0%,
-                rgba(80, 140, 215, 0.06) 7%,
-                rgba(0, 0, 0, 0.72) 18%,
+                rgba(230, 200, 110, 0.12) 0%,
+                rgba(80, 140, 215, 0.07) 8%,
+                rgba(0, 0, 0, 0.76) 21%,
                 rgba(0, 0, 0, 1) 100%
             );
     }
-    72% {
+    78% {
         opacity: 1;
         background-color: var(--c-bg);
         background-image: none;
@@ -214,19 +215,41 @@ html, body {
         background-color: var(--c-bg);
         background-image: none;
     }
-    32% {
+    20% {
         opacity: 1;
         background-color: var(--c-bg);
         background-image: none;
     }
-    76% {
-        opacity: 0.35;
+    38% {
+        opacity: 0.95;
         background-image:
             radial-gradient(
                 circle at 50% 50%,
-                rgba(230, 200, 110, 0.07) 0%,
-                rgba(80, 140, 215, 0.05) 20%,
-                rgba(0, 0, 0, 0.76) 48%,
+                rgba(230, 200, 110, 0.08) 0%,
+                rgba(80, 140, 215, 0.05) 10%,
+                rgba(0, 0, 0, 0.82) 24%,
+                rgba(0, 0, 0, 0.98) 100%
+            );
+    }
+    60% {
+        opacity: 0.8;
+        background-image:
+            radial-gradient(
+                circle at 50% 50%,
+                rgba(230, 200, 110, 0.14) 0%,
+                rgba(80, 140, 215, 0.09) 22%,
+                rgba(0, 0, 0, 0.68) 46%,
+                rgba(0, 0, 0, 0.97) 100%
+            );
+    }
+    80% {
+        opacity: 0.45;
+        background-image:
+            radial-gradient(
+                circle at 50% 50%,
+                rgba(230, 200, 110, 0.09) 0%,
+                rgba(80, 140, 215, 0.06) 12%,
+                rgba(0, 0, 0, 0.76) 28%,
                 rgba(0, 0, 0, 0.98) 100%
             );
     }

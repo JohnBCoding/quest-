@@ -250,8 +250,10 @@ pub fn area_screen(props: &AreaScreenProps) -> Html {
                     player_progress_state.set(0.0);
                     *mob_progress_ref.borrow_mut() = 0.0;
                     mob_progress_state.set(0.0);
-                    player_flash.set(false);
-                    mob_flash.set(false);
+                    if *portal_transitioning {
+                        player_flash.set(false);
+                        mob_flash.set(false);
+                    }
                 }
 
                 move || drop(interval_handle)

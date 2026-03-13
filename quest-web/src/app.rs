@@ -87,17 +87,24 @@ pub enum AppMsg {
 }
 
 impl App {
-    fn transition_duration_ms(effect: TransitionEffect) -> u32 {
+    fn transition_out_duration_ms(effect: TransitionEffect) -> u32 {
         match effect {
             TransitionEffect::Wipe => 400,
             TransitionEffect::TownPortal => 900,
         }
     }
 
+    fn transition_in_duration_ms(effect: TransitionEffect) -> u32 {
+        match effect {
+            TransitionEffect::Wipe => 400,
+            TransitionEffect::TownPortal => 1300,
+        }
+    }
+
     fn start_transition(&mut self, ctx: &Context<Self>, effect: TransitionEffect) {
         self.transition_effect = effect;
         self.transition = TransitionState::WipeOut;
-        let duration = Self::transition_duration_ms(effect);
+        let duration = Self::transition_out_duration_ms(effect);
         let link = ctx.link().clone();
         gloo_timers::callback::Timeout::new(duration, move || {
             link.send_message(AppMsg::TransitionMidpoint);
@@ -229,7 +236,7 @@ impl Component for App {
                 self.transition = TransitionState::WipeIn;
 
                 let link = ctx.link().clone();
-                let duration = Self::transition_duration_ms(self.transition_effect);
+                let duration = Self::transition_in_duration_ms(self.transition_effect);
                 gloo_timers::callback::Timeout::new(duration, move || {
                     link.send_message(AppMsg::TransitionEnd);
                 })
