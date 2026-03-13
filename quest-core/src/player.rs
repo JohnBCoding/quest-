@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::action::Action;
+use crate::equipment::{EquipmentItem, EquipmentSlot};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Player {
@@ -21,6 +22,12 @@ pub struct Player {
     pub health_potion_uses: u32,
     #[serde(default = "default_health_potion_capacity")]
     pub health_potion_capacity: u32,
+    #[serde(default)]
+    pub equipment_inventory: Vec<String>,
+    #[serde(default)]
+    pub equipped_main_hand: Option<String>,
+    #[serde(default)]
+    pub equipped_off_hand: Option<String>,
 }
 
 fn default_action_speed() -> u32 {
@@ -33,6 +40,14 @@ fn default_max_experience() -> u64 {
 
 fn default_health_potion_capacity() -> u32 {
     5
+}
+
+fn default_fist_damage_min() -> u32 {
+    1
+}
+
+fn default_fist_damage_max() -> u32 {
+    2
 }
 
 impl Player {
@@ -49,6 +64,9 @@ impl Player {
             action_speed_ms: 1000,
             health_potion_uses: 0,
             health_potion_capacity: default_health_potion_capacity(),
+            equipment_inventory: Vec::new(),
+            equipped_main_hand: None,
+            equipped_off_hand: None,
         }
     }
 
@@ -173,6 +191,82 @@ impl Player {
             _ => {}
         }
     }
+
+    pub fn add_equipment_item(&mut self, item_id: &str) {
+        self.equipment_inventory.push(item_id.to_string());
+    }
+
+    pub fn list_equipment_inventory_items(&self) -> Vec<EquipmentItem> {
+        self.equipment_inventory
+            .iter()
+            .filter_map(|id| EquipmentItem::get_by_id(id))
+            .collect()
+    }
+
+    pub fn equipped_item(&self, slot: EquipmentSlot) -> Option<EquipmentItem> {
+        let equipped_id = match slot {
+            EquipmentSlot::MainHand => self.equipped_main_hand.as_deref(),
+            EquipmentSlot::OffHand => self.equipped_off_hand.as_deref(),
+        }?;
+
+        EquipmentItem::get_by_id(equipped_id)
+    }
+
+    pub fn equip_item_to_slot(&mut self, item_id: &str, slot: EquipmentSlot) -> bool {
+        let Some(item) = EquipmentItem::get_by_id(item_id) else {
+            return false;
+        };
+        if !item.can_equip_in(slot) {
+            return false;
+        }
+
+        let Some(inventory_idx) = self.equipment_inventory.iter().position(|id| id == item_id)
+        else {
+            return false;
+        };
+
+        self.equipment_inventory.remove(inventory_idx);
+        let replaced = match slot {
+            EquipmentSlot::MainHand => self.equipped_main_hand.replace(item_id.to_string()),
+            EquipmentSlot::OffHand => self.equipped_off_hand.replace(item_id.to_string()),
+        };
+        if let Some(item_id) = replaced {
+            self.equipment_inventory.push(item_id);
+        }
+        true
+    }
+
+    pub fn unequip_slot(&mut self, slot: EquipmentSlot) -> bool {
+        let equipped = match slot {
+            EquipmentSlot::MainHand => self.equipped_main_hand.take(),
+            EquipmentSlot::OffHand => self.equipped_off_hand.take(),
+        };
+
+        if let Some(item_id) = equipped {
+            self.equipment_inventory.push(item_id);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn attack_damage_range(&self) -> (u32, u32) {
+        let main_hand = self.equipped_item(EquipmentSlot::MainHand);
+        let off_hand = self.equipped_item(EquipmentSlot::OffHand);
+
+        match (main_hand, off_hand) {
+            (Some(main), Some(off)) => {
+                let combined_min = main.min_damage.saturating_add(off.min_damage);
+                let combined_max = main.max_damage.saturating_add(off.max_damage);
+                (
+                    combined_min.saturating_mul(75) / 100,
+                    combined_max.saturating_mul(75) / 100,
+                )
+            }
+            (Some(weapon), None) | (None, Some(weapon)) => (weapon.min_damage, weapon.max_damage),
+            (None, None) => (default_fist_damage_min(), default_fist_damage_max()),
+        }
+    }
 }
 
 impl Default for Player {
@@ -205,6 +299,9 @@ mod tests {
         assert_eq!(player.action_speed_ms, 1000);
         assert_eq!(player.health_potion_uses, 0);
         assert_eq!(player.health_potion_capacity, 5);
+        assert!(player.equipment_inventory.is_empty());
+        assert!(player.equipped_main_hand.is_none());
+        assert!(player.equipped_off_hand.is_none());
     }
 
     #[test]
@@ -368,5 +465,50 @@ mod tests {
         let json = serde_json::to_string(&player).unwrap();
         let deserialized: Player = serde_json::from_str(&json).unwrap();
         assert_eq!(player, deserialized);
+    }
+
+    #[test]
+    fn attack_damage_defaults_to_fists() {
+        let player = Player::default();
+        assert_eq!(player.attack_damage_range(), (1, 2));
+    }
+
+    #[test]
+    fn equip_item_to_main_hand_uses_weapon_range() {
+        let mut player = Player::default();
+        player.add_equipment_item("split_hilt_blade");
+        let equipped = player.equip_item_to_slot("split_hilt_blade", EquipmentSlot::MainHand);
+
+        assert!(equipped);
+        assert_eq!(
+            player.equipped_main_hand,
+            Some("split_hilt_blade".to_string())
+        );
+        assert!(player.equipment_inventory.is_empty());
+        assert_eq!(player.attack_damage_range(), (1, 4));
+    }
+
+    #[test]
+    fn dual_wield_scales_combined_weapon_range() {
+        let mut player = Player::default();
+        player.add_equipment_item("split_hilt_blade");
+        player.add_equipment_item("split_hilt_blade");
+        assert!(player.equip_item_to_slot("split_hilt_blade", EquipmentSlot::MainHand));
+        assert!(player.equip_item_to_slot("split_hilt_blade", EquipmentSlot::OffHand));
+        assert_eq!(player.attack_damage_range(), (1, 6));
+    }
+
+    #[test]
+    fn unequip_slot_returns_item_to_inventory() {
+        let mut player = Player::default();
+        player.add_equipment_item("split_hilt_blade");
+        assert!(player.equip_item_to_slot("split_hilt_blade", EquipmentSlot::MainHand));
+        assert!(player.unequip_slot(EquipmentSlot::MainHand));
+        assert!(player.equipped_main_hand.is_none());
+        assert_eq!(
+            player.equipment_inventory,
+            vec!["split_hilt_blade".to_string()]
+        );
+        assert_eq!(player.attack_damage_range(), (1, 2));
     }
 }

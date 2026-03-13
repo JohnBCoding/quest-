@@ -5,6 +5,7 @@ pub struct TownScreenProps {
     pub has_auto_combat: bool,
     pub on_exit: Callback<()>,
     pub on_open_character_sheet: Callback<()>,
+    pub on_open_inventory: Callback<()>,
     pub on_travel_fringe: Callback<()>,
 }
 
@@ -22,6 +23,11 @@ pub fn town_screen(props: &TownScreenProps) -> Html {
 
     let on_travel = {
         let cb = props.on_travel_fringe.clone();
+        Callback::from(move |_: MouseEvent| cb.emit(()))
+    };
+
+    let on_inventory = {
+        let cb = props.on_open_inventory.clone();
         Callback::from(move |_: MouseEvent| cb.emit(()))
     };
 
@@ -43,6 +49,9 @@ pub fn town_screen(props: &TownScreenProps) -> Html {
                                 <>
                                     <button class="btn btn-secondary town-btn" onclick={on_character_sheet}>
                                         { "Character Sheet" }
+                                    </button>
+                                    <button class="btn btn-secondary town-btn" onclick={on_inventory}>
+                                        { "Inventory" }
                                     </button>
                                     <button class="btn btn-warning town-btn" onclick={on_travel}>
                                         { "Travel to The Fringe" }

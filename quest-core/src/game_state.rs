@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::area::Area;
+use crate::equipment::EquipmentSlot;
 use crate::mob::Mob;
 use crate::player::Player;
 use crate::rng::{RngManager, RngSnapshot};
@@ -24,6 +25,14 @@ pub struct GameState {
     pub fruit_scene_active: bool,
     #[serde(default)]
     pub pending_fruit_id: Option<String>,
+    #[serde(default)]
+    pub equipment_scene_active: bool,
+    #[serde(default)]
+    pub pending_equipment_id: Option<String>,
+    #[serde(default)]
+    pub pending_town_after_inventory: bool,
+    #[serde(default)]
+    pub split_hilt_scene_seen: bool,
     #[serde(default)]
     pub action_counter: u32,
     #[serde(default)]
@@ -56,6 +65,10 @@ impl GameState {
             in_town: false,
             fruit_scene_active: false,
             pending_fruit_id: None,
+            equipment_scene_active: false,
+            pending_equipment_id: None,
+            pending_town_after_inventory: false,
+            split_hilt_scene_seen: false,
             action_counter: 0,
             portals_unlocked: false,
             version: SAVE_VERSION,
@@ -99,10 +112,10 @@ impl GameState {
         self.rng_snapshot = rng.snapshot();
     }
 
-    pub fn execute_attack(&mut self) -> bool {
+    fn execute_attack_with_damage(&mut self, damage: u32) -> bool {
         if let Some(mob) = self.current_mob.as_mut() {
             let was_alive = !mob.is_dead();
-            mob.take_damage(2);
+            mob.take_damage(damage);
             if was_alive && mob.is_dead() {
                 self.player.gain_experience(mob.base_xp);
             }
@@ -110,6 +123,19 @@ impl GameState {
         } else {
             false
         }
+    }
+
+    pub fn execute_attack(&mut self) -> bool {
+        let (min_damage, _max_damage) = self.player.attack_damage_range();
+        self.execute_attack_with_damage(min_damage)
+    }
+
+    pub fn execute_attack_with_rng(&mut self, rng: &mut RngManager) -> bool {
+        let (min_damage, max_damage) = self.player.attack_damage_range();
+        let damage = rng.gen_range("combat", min_damage, max_damage);
+        let did_attack = self.execute_attack_with_damage(damage);
+        self.sync_rng(rng);
+        did_attack
     }
 
     pub fn execute_prioritized_action(&mut self) -> Option<ExecutedPlayerAction> {
@@ -147,14 +173,66 @@ impl GameState {
         None
     }
 
-    pub fn execute_mob_attack(&mut self) -> Option<u32> {
+    pub fn execute_prioritized_action_with_rng(
+        &mut self,
+        rng: &mut RngManager,
+    ) -> Option<ExecutedPlayerAction> {
         let mob = self.current_mob.as_ref()?;
         if mob.is_dead() || !self.player.is_alive() {
             return None;
         }
-        let damage = mob.base_damage;
+
+        let next_action_number = self.action_counter.saturating_add(1);
+        let actions = self.player.actions.clone();
+
+        for action in actions {
+            if !action.trigger_matches(next_action_number) {
+                continue;
+            }
+
+            match action.id.as_str() {
+                "health_potion" => {
+                    let threshold = action.health_threshold_percent().unwrap_or(50);
+                    if let Some(healed) = self.player.use_health_potion(threshold) {
+                        self.action_counter = next_action_number;
+                        return Some(ExecutedPlayerAction::HealthPotion { healed });
+                    }
+                }
+                "attack" => {
+                    if self.execute_attack_with_rng(rng) {
+                        self.action_counter = next_action_number;
+                        return Some(ExecutedPlayerAction::Attack);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        None
+    }
+
+    fn execute_mob_attack_with_damage(&mut self, damage: u32) -> Option<u32> {
+        let mob = self.current_mob.as_ref()?;
+        if mob.is_dead() || !self.player.is_alive() {
+            return None;
+        }
         self.player.take_damage(damage);
         Some(damage)
+    }
+
+    pub fn execute_mob_attack(&mut self) -> Option<u32> {
+        let mob = self.current_mob.as_ref()?;
+        let (min_damage, _max_damage) = mob.damage_range();
+        self.execute_mob_attack_with_damage(min_damage)
+    }
+
+    pub fn execute_mob_attack_with_rng(&mut self, rng: &mut RngManager) -> Option<u32> {
+        let mob = self.current_mob.as_ref()?;
+        let (min_damage, max_damage) = mob.damage_range();
+        let damage = rng.gen_range("combat", min_damage, max_damage);
+        let hit = self.execute_mob_attack_with_damage(damage);
+        self.sync_rng(rng);
+        hit
     }
 
     pub fn advance_encounter(&mut self) -> bool {
@@ -182,6 +260,21 @@ impl GameState {
     }
 
     fn handle_boss_defeat(&mut self) {
+        let boss_id = self
+            .current_mob
+            .as_ref()
+            .map(|mob| mob.id.as_str())
+            .unwrap_or("");
+        if boss_id == "rat_face" {
+            if !self.split_hilt_scene_seen {
+                self.equipment_scene_active = true;
+                self.pending_equipment_id = Some("split_hilt_blade".to_string());
+                self.split_hilt_scene_seen = true;
+                return;
+            }
+            self.player.add_equipment_item("split_hilt_blade");
+        }
+
         if self.current_area.id == "the_beach" && !self.player.has_auto_combat() {
             self.fruit_scene_active = true;
             self.pending_fruit_id = Some("fruit_of_instinct".to_string());
@@ -214,6 +307,32 @@ impl GameState {
             self.player.eat_fruit(&fruit_id);
         }
         self.fruit_scene_active = false;
+    }
+
+    pub fn complete_equipment_scene(&mut self) {
+        if !self.equipment_scene_active {
+            return;
+        }
+
+        if let Some(item_id) = self.pending_equipment_id.take() {
+            self.player.add_equipment_item(&item_id);
+            let _ = self
+                .player
+                .equip_item_to_slot(&item_id, EquipmentSlot::MainHand);
+        }
+
+        self.equipment_scene_active = false;
+        self.pending_town_after_inventory = true;
+    }
+
+    pub fn finish_first_inventory_visit(&mut self) -> bool {
+        if !self.pending_town_after_inventory {
+            return false;
+        }
+
+        self.pending_town_after_inventory = false;
+        self.enter_town();
+        true
     }
 
     pub fn enter_area(&mut self, area_id: &str) -> bool {
@@ -266,6 +385,10 @@ mod tests {
         assert_eq!(state.version, SAVE_VERSION);
         assert!(!state.fruit_scene_active);
         assert!(state.pending_fruit_id.is_none());
+        assert!(!state.equipment_scene_active);
+        assert!(state.pending_equipment_id.is_none());
+        assert!(!state.pending_town_after_inventory);
+        assert!(!state.split_hilt_scene_seen);
         assert_eq!(state.action_counter, 0);
         assert!(!state.portals_unlocked);
     }
@@ -355,7 +478,7 @@ mod tests {
         }
         let result = state.execute_attack();
         assert!(result);
-        assert_eq!(state.current_mob.unwrap().health, 3);
+        assert_eq!(state.current_mob.unwrap().health, 4);
         assert_eq!(state.encounters_cleared, 0);
         assert_eq!(state.player.experience, 0);
     }
@@ -364,6 +487,9 @@ mod tests {
     fn execute_attack_kills_mob_and_increments_encounters() {
         let (mut state, _) = GameState::new_game();
         state.current_area.base_encounter_amount = 10;
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 1;
+        }
         let expected_xp = state.current_mob.as_ref().map(|m| m.base_xp).unwrap_or(0);
         let result = state.execute_attack();
         assert!(result);
@@ -383,11 +509,17 @@ mod tests {
         let (mut state, _) = GameState::new_game();
         state.current_area.base_encounter_amount = 2;
 
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 1;
+        }
         state.execute_attack();
         state.advance_encounter();
         assert_eq!(state.encounters_cleared, 1);
         assert!(state.current_mob.is_some());
 
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 1;
+        }
         state.execute_attack();
         state.advance_encounter();
         assert_eq!(state.encounters_cleared, 2);
@@ -411,7 +543,7 @@ mod tests {
         let expected_damage = state
             .current_mob
             .as_ref()
-            .map(|mob| mob.base_damage)
+            .map(|mob| mob.damage_range().0)
             .unwrap_or(0);
         let damage = state.execute_mob_attack();
         assert_eq!(damage, Some(expected_damage));
@@ -424,6 +556,34 @@ mod tests {
         state.current_mob = None;
         let damage = state.execute_mob_attack();
         assert_eq!(damage, None);
+    }
+
+    #[test]
+    fn execute_attack_with_rng_rolls_within_player_range() {
+        let (mut state, mut rng) = GameState::new_game();
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 10;
+        }
+        let hp_before = state.current_mob.as_ref().unwrap().health;
+
+        let attacked = state.execute_attack_with_rng(&mut rng);
+        assert!(attacked);
+
+        let hp_after = state.current_mob.as_ref().unwrap().health;
+        let dealt = hp_before.saturating_sub(hp_after);
+        assert!((1..=2).contains(&dealt));
+    }
+
+    #[test]
+    fn execute_mob_attack_with_rng_rolls_within_mob_range() {
+        let (mut state, mut rng) = GameState::new_game();
+        state.current_mob = Mob::get_by_id("rat_face");
+        state.player.health = 50;
+        let health_before = state.player.health;
+
+        let dealt = state.execute_mob_attack_with_rng(&mut rng).unwrap();
+        assert!((2..=5).contains(&dealt));
+        assert_eq!(state.player.health, health_before.saturating_sub(dealt));
     }
 
     #[test]
@@ -450,7 +610,7 @@ mod tests {
         let expected_xp = state.current_mob.as_ref().map(|m| m.base_xp).unwrap_or(0);
 
         if let Some(mob) = &mut state.current_mob {
-            mob.health = 2;
+            mob.health = 1;
         }
 
         state.execute_attack();
@@ -591,6 +751,77 @@ mod tests {
     }
 
     #[test]
+    fn rat_face_first_boss_kill_triggers_equipment_scene() {
+        let (mut state, _) = GameState::new_game();
+        state.current_area = Area::get_by_id("the_fringe").unwrap();
+        state.current_mob = Mob::get_by_id("rat_face");
+        state.is_boss_encounter = true;
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 0;
+        }
+
+        let advanced = state.advance_encounter();
+        assert!(advanced);
+        assert!(state.equipment_scene_active);
+        assert_eq!(
+            state.pending_equipment_id,
+            Some("split_hilt_blade".to_string())
+        );
+        assert!(!state.in_town);
+    }
+
+    #[test]
+    fn complete_equipment_scene_equips_item_and_sets_inventory_flag() {
+        let (mut state, _) = GameState::new_game();
+        state.equipment_scene_active = true;
+        state.pending_equipment_id = Some("split_hilt_blade".to_string());
+
+        state.complete_equipment_scene();
+        assert!(!state.equipment_scene_active);
+        assert!(state.pending_equipment_id.is_none());
+        assert_eq!(
+            state.player.equipped_main_hand,
+            Some("split_hilt_blade".to_string())
+        );
+        assert!(state.pending_town_after_inventory);
+    }
+
+    #[test]
+    fn finish_first_inventory_visit_enters_town_once() {
+        let (mut state, _) = GameState::new_game();
+        state.pending_town_after_inventory = true;
+
+        let first = state.finish_first_inventory_visit();
+        let second = state.finish_first_inventory_visit();
+
+        assert!(first);
+        assert!(!second);
+        assert!(state.in_town);
+        assert!(!state.pending_town_after_inventory);
+    }
+
+    #[test]
+    fn rat_face_subsequent_kill_drops_item_without_scene() {
+        let (mut state, _) = GameState::new_game();
+        state.current_area = Area::get_by_id("the_fringe").unwrap();
+        state.current_mob = Mob::get_by_id("rat_face");
+        state.is_boss_encounter = true;
+        state.split_hilt_scene_seen = true;
+        if let Some(mob) = &mut state.current_mob {
+            mob.health = 0;
+        }
+
+        state.advance_encounter();
+        assert!(!state.equipment_scene_active);
+        assert!(state.pending_equipment_id.is_none());
+        assert!(state.in_town);
+        assert_eq!(
+            state.player.equipment_inventory,
+            vec!["split_hilt_blade".to_string()]
+        );
+    }
+
+    #[test]
     fn enter_boss_portal_spawns_boss() {
         let (mut state, mut rng) = GameState::new_game();
         state.current_area.bosses = vec!["rat_lord".to_string()];
@@ -658,7 +889,7 @@ mod tests {
         assert_eq!(result, Some(ExecutedPlayerAction::Attack));
         assert_eq!(
             state.current_mob.as_ref().unwrap().health,
-            mob_hp_before - 2
+            mob_hp_before - 1
         );
         assert_eq!(state.player.health_potion_uses, 5);
         assert_eq!(state.action_counter, 1);
@@ -677,7 +908,7 @@ mod tests {
         assert_eq!(result, Some(ExecutedPlayerAction::Attack));
         assert_eq!(
             state.current_mob.as_ref().unwrap().health,
-            mob_hp_before - 2
+            mob_hp_before - 1
         );
     }
 
